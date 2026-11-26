@@ -427,18 +427,26 @@ function mergeExamWithProgress(exam: ExamSummary, entry?: MockProgressEntry): Ex
 	};
 }
 
-function buildMockQuestions(exam: ExamSummary): ExamQuestion[] {
+function buildMockQuestions(exam: ExamSummary, topics: ExamTopic[]): ExamQuestion[] {
 	const labels = ['A', 'B', 'C', 'D'] as const;
+	const topicIds: string[] = [];
+	for (const topic of topics) {
+		for (let i = 0; i < topic.questionCount; i++) {
+			topicIds.push(topic.id);
+		}
+	}
 
 	return Array.from({ length: exam.totalQuestions }, (_, idx) => {
 		const index = idx + 1;
 		const multipleChoice = index % 5 === 0;
 		const correctOptionIds = multipleChoice ? ['a', 'c'] : [labels[idx % 4].toLowerCase()];
+		const topicId = topicIds[idx] ?? topics[0]?.id ?? 'general';
 
 		const isMb330First = index === 1 && exam.id === 'mb-330';
 
 		return {
 			id: `${exam.id}-q-${index}`,
+			topicId,
 			index,
 			prompt: isMb330First
 				? 'A company uses Dynamics 365 Supply Chain Management. You need to configure warehouse location directives so put-away work selects bulk locations only when pallet quantities are received. Which setup should you configure?'
@@ -584,6 +592,7 @@ export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload
 	const store = readProgressStore();
 	const entry = store[examId];
 	const summary = mergeExamWithProgress(baseExam, entry);
+	const topics = buildMockTopics(summary);
 	const exam: ExamDetail = {
 		...summary,
 		description:
@@ -594,9 +603,9 @@ export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload
 			examId === 'mb-330'
 				? 'Bộ câu hỏi luyện tập về quản lý thông tin sản phẩm, kiểm soát tồn kho, mua hàng, bán hàng và quản lý kho trong Dynamics 365 Supply Chain Management.'
 				: `Bộ câu hỏi luyện tập tổng hợp cho ${summary.code} (${summary.title}), phân chia theo các nhóm chủ đề của kỳ thi.`,
-		topics: buildMockTopics(summary)
+		topics
 	};
-	const questions = buildMockQuestions(summary);
+	const questions = buildMockQuestions(summary, topics);
 
 	return Promise.resolve({
 		exam,
@@ -614,7 +623,7 @@ export function mockSubmitAnswer(
 		return Promise.reject(new Error(`Exam "${examId}" not found`));
 	}
 
-	const questions = buildMockQuestions(baseExam);
+	const questions = buildMockQuestions(baseExam, buildMockTopics(baseExam));
 	const question = questions.find((q) => q.id === payload.questionId);
 	if (!question) {
 		return Promise.reject(new Error(`Question "${payload.questionId}" not found`));

@@ -9,6 +9,7 @@
 	let examId = $derived(page.params.id ?? '');
 
 	let mode = $state<'overview' | 'practice'>('overview');
+	let activeTopicId = $state<string | null>(null);
 	let exam = $state<ExamDetail | null>(null);
 	let questions = $state<ExamQuestion[]>([]);
 	let answers = $state<Record<string, ExamAnswerRecord>>({});
@@ -18,7 +19,13 @@
 	let submitting = $state(false);
 	let error = $state<string | null>(null);
 
-	let currentQuestion = $derived(questions[currentIndex - 1] ?? null);
+	let activeTopic = $derived(
+		activeTopicId ? (exam?.topics.find((t) => t.id === activeTopicId) ?? null) : null
+	);
+	let practiceQuestions = $derived(
+		activeTopicId ? questions.filter((q) => q.topicId === activeTopicId) : questions
+	);
+	let currentQuestion = $derived(practiceQuestions[currentIndex - 1] ?? null);
 	let currentAnswer = $derived(currentQuestion ? (answers[currentQuestion.id] ?? null) : null);
 	let answeredCount = $derived(Math.max(exam?.answeredCount ?? 0, Object.keys(answers).length));
 	let resumeIndex = $derived(
@@ -27,8 +34,8 @@
 			: 1
 	);
 
-	function syncSelectionForQuestion(index: number) {
-		const q = questions[index - 1];
+	function syncSelectionForQuestion(index: number, list: ExamQuestion[] = practiceQuestions) {
+		const q = list[index - 1];
 		if (!q) {
 			selectedOptionIds = [];
 			return;
@@ -38,12 +45,36 @@
 	}
 
 	function startPractice(startAt = 1) {
-		goToQuestion(startAt);
+		activeTopicId = null;
+		const list = questions;
+		const safeIndex = Math.min(Math.max(1, startAt), Math.max(1, list.length));
+		currentIndex = safeIndex;
+		syncSelectionForQuestion(safeIndex, list);
 		mode = 'practice';
 	}
 
+	function startTopicPractice(topicId: string) {
+		activeTopicId = topicId;
+		const list = questions.filter((q) => q.topicId === topicId);
+		const firstUnansweredIdx = list.findIndex((q) => !answers[q.id]);
+		const startAt = firstUnansweredIdx >= 0 ? firstUnansweredIdx + 1 : 1;
+		currentIndex = startAt;
+		syncSelectionForQuestion(startAt, list);
+		mode = 'practice';
+	}
+
+	function getTopicAnsweredCount(topicId: string): number {
+		let count = 0;
+		for (const q of questions) {
+			if (q.topicId === topicId && answers[q.id]) {
+				count++;
+			}
+		}
+		return count;
+	}
+
 	function goToQuestion(index: number) {
-		if (index < 1 || index > questions.length) return;
+		if (index < 1 || index > practiceQuestions.length) return;
 		currentIndex = index;
 		syncSelectionForQuestion(index);
 	}
@@ -96,7 +127,7 @@
 					? payload.exam.lastQuestionIndex
 					: 1;
 			currentIndex = startIndex;
-			syncSelectionForQuestion(startIndex);
+			syncSelectionForQuestion(startIndex, payload.questions);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load exam';
 		} finally {
@@ -232,10 +263,10 @@
 				</div>
 			</div>
 
-			<!-- Topics Breakdown -->
+			<!-- Topics -->
 			<div class="rounded-xl border border-border bg-surface p-6">
 				<div class="flex items-center justify-between">
-					<h2 class="text-sm font-semibold text-text">Topics & Question Breakdown</h2>
+					<h2 class="text-sm font-semibold text-text">Topics</h2>
 					<span class="text-xs text-text-muted">{exam.topics.length} topics</span>
 				</div>
 
@@ -245,7 +276,10 @@
 							exam.totalQuestions > 0
 								? Math.round((topic.questionCount / exam.totalQuestions) * 100)
 								: 0}
-						<div class="flex items-center justify-between gap-4 px-4 py-3">
+						{@const topicAnswered = getTopicAnsweredCount(topic.id)}
+						<div
+							class="flex flex-col justify-between gap-3 px-4 py-3.5 sm:flex-row sm:items-center"
+						>
 							<div class="min-w-0">
 								<p class="truncate text-sm font-medium text-text">
 									{i + 1}. {topic.name}
@@ -253,13 +287,36 @@
 								{#if headerState.showVi && topic.nameVi}
 									<p class="mt-0.5 truncate text-xs text-accent/90">{topic.nameVi}</p>
 								{/if}
-								<p class="mt-0.5 text-xs text-text-muted">{share}% of exam</p>
+								<p class="mt-0.5 text-xs text-text-muted">
+									{topicAnswered}/{topic.questionCount} answered · {share}% of exam
+								</p>
 							</div>
-							<span
-								class="shrink-0 rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text"
-							>
-								{topic.questionCount} questions
-							</span>
+
+							<div class="flex shrink-0 items-center gap-2.5">
+								<span
+									class="rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text-muted"
+								>
+									{topic.questionCount} questions
+								</span>
+								<button
+									type="button"
+									onclick={() => startTopicPractice(topic.id)}
+									class={[
+										'rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors',
+										topicAnswered > 0 && topicAnswered < topic.questionCount
+											? 'bg-accent text-white hover:bg-accent-hover'
+											: 'border border-border bg-surface text-text hover:bg-surface-hover'
+									]}
+								>
+									{#if topicAnswered >= topic.questionCount}
+										Review
+									{:else if topicAnswered > 0}
+										Continue
+									{:else}
+										Start
+									{/if}
+								</button>
+							</div>
 						</div>
 					{/each}
 				</div>
@@ -275,6 +332,13 @@
 					{exam.code}
 				</span>
 				<span class="text-xs text-text-muted">{exam.vendor}</span>
+				{#if activeTopic}
+					<span
+						class="rounded-full border border-accent/30 bg-accent/15 px-2.5 py-0.5 text-xs font-medium text-accent"
+					>
+						{activeTopic.name}
+					</span>
+				{/if}
 			</div>
 			<h1 class="mt-2 text-lg font-bold text-text sm:text-xl">{exam.title}</h1>
 		</div>
@@ -284,7 +348,7 @@
 			<div class="space-y-5 rounded-xl border border-border bg-surface p-6">
 				<div class="flex items-center justify-between border-b border-border pb-3">
 					<span class="text-xs font-semibold tracking-wide text-accent uppercase">
-						Question {currentQuestion.index} of {questions.length}
+						Question {currentIndex} of {practiceQuestions.length}
 					</span>
 					<span class="text-xs text-text-muted">
 						{currentQuestion.multipleChoice ? 'Select all that apply' : 'Single choice'}
@@ -390,7 +454,7 @@
 
 						<button
 							type="button"
-							disabled={currentIndex >= questions.length}
+							disabled={currentIndex >= practiceQuestions.length}
 							onclick={() => goToQuestion(currentIndex + 1)}
 							class="rounded-lg border border-border bg-bg px-3.5 py-2 text-xs font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
 						>
@@ -403,15 +467,16 @@
 			<!-- Question Navigator -->
 			<aside class="h-fit rounded-xl border border-border bg-surface p-4">
 				<h2 class="text-xs font-semibold tracking-wide text-text-muted uppercase">
-					Questions ({questions.length})
+					Questions ({practiceQuestions.length})
 				</h2>
 				<div class="mt-3 grid max-h-96 grid-cols-5 gap-1.5 overflow-y-auto pr-1">
-					{#each questions as q (q.id)}
-						{@const isCurrent = q.index === currentIndex}
+					{#each practiceQuestions as q, idx (q.id)}
+						{@const navIndex = idx + 1}
+						{@const isCurrent = navIndex === currentIndex}
 						{@const ans = answers[q.id]}
 						<button
 							type="button"
-							onclick={() => goToQuestion(q.index)}
+							onclick={() => goToQuestion(navIndex)}
 							class={[
 								'flex h-8 items-center justify-center rounded-md border text-xs font-medium transition-colors',
 								isCurrent
@@ -423,7 +488,7 @@
 											: 'border-border bg-bg text-text-muted hover:bg-surface-hover hover:text-text'
 							]}
 						>
-							{q.index}
+							{navIndex}
 						</button>
 					{/each}
 				</div>

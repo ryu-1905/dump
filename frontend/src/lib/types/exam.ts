@@ -36,6 +36,7 @@ export interface QuestionOption {
 
 export interface ExamQuestion {
 	id: string;
+	topicId: string;
 	index: number;
 	prompt: string;
 	promptVi?: string;
