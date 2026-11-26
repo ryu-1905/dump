@@ -20,15 +20,24 @@
 	let page = $state(1);
 	let totalPages = $state(1);
 	let loading = $state(true);
+	let loadingMore = $state(false);
 	let error = $state<string | null>(null);
 	let search = $state('');
 	let activeFilter = $state<FilterOption>('all');
+	let sentinel = $state<HTMLDivElement | undefined>(undefined);
 
+	let hasMore = $derived(page < totalPages);
 	let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
-	async function loadExams(targetPage = page) {
-		loading = true;
+	async function loadExams(targetPage: number, append = false) {
+		if (append) {
+			if (loadingMore || loading) return;
+			loadingMore = true;
+		} else {
+			loading = true;
+		}
 		error = null;
+
 		try {
 			const res = await listExams({
 				page: targetPage,
@@ -36,7 +45,15 @@
 				q: search,
 				status: activeFilter
 			});
-			exams = res.items;
+
+			if (append) {
+				const seen = new Set(exams.map((item) => item.id));
+				const nextItems = res.items.filter((item) => !seen.has(item.id));
+				exams = [...exams, ...nextItems];
+			} else {
+				exams = res.items;
+			}
+
 			total = res.total;
 			page = res.page;
 			totalPages = res.totalPages;
@@ -44,29 +61,44 @@
 			error = err instanceof Error ? err.message : 'Failed to load exams';
 		} finally {
 			loading = false;
+			loadingMore = false;
 		}
 	}
 
 	function handleSearchInput() {
 		clearTimeout(searchTimer);
 		searchTimer = setTimeout(() => {
-			void loadExams(1);
+			void loadExams(1, false);
 		}, 300);
 	}
 
 	function selectFilter(value: FilterOption) {
 		if (activeFilter === value) return;
 		activeFilter = value;
-		void loadExams(1);
+		void loadExams(1, false);
 	}
 
-	function goToPage(nextPage: number) {
-		if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
-		void loadExams(nextPage);
-	}
+	$effect(() => {
+		const target = sentinel;
+		if (!target) return;
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					if (hasMore && !loading && !loadingMore && !error) {
+						void loadExams(page + 1, true);
+					}
+				}
+			},
+			{ rootMargin: '200px' }
+		);
+
+		observer.observe(target);
+		return () => observer.disconnect();
+	});
 
 	onMount(() => {
-		void loadExams(1);
+		void loadExams(1, false);
 		return () => clearTimeout(searchTimer);
 	});
 </script>
@@ -128,13 +160,13 @@
 				<div class="h-48 animate-pulse rounded-xl border border-border bg-surface p-5"></div>
 			{/each}
 		</div>
-	{:else if error}
+	{:else if error && exams.length === 0}
 		<div class="rounded-xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-300">
 			<p class="font-medium">Unable to load exam list</p>
 			<p class="mt-1 text-xs text-red-300/80">{error}</p>
 			<button
 				type="button"
-				onclick={() => void loadExams(page)}
+				onclick={() => void loadExams(1, false)}
 				class="mt-3 rounded-lg border border-red-500/30 bg-bg px-3 py-1.5 text-xs font-medium text-text hover:bg-surface"
 			>
 				Retry
@@ -152,34 +184,21 @@
 			{/each}
 		</div>
 
-		{#if totalPages > 1}
-			<nav
-				aria-label="Pagination"
-				class="flex items-center justify-between border-t border-border pt-4"
-			>
+		<!-- Infinite Scroll Sentinel & Footer Status -->
+		<div bind:this={sentinel} class="flex items-center justify-center py-4">
+			{#if loadingMore}
+				<span class="text-xs text-text-muted">Loading more exams...</span>
+			{:else if error}
 				<button
 					type="button"
-					disabled={page <= 1}
-					onclick={() => goToPage(page - 1)}
-					class="rounded-lg border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
+					onclick={() => void loadExams(page + 1, true)}
+					class="rounded-lg border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-text hover:bg-surface-hover"
 				>
-					Previous
+					Failed to load more — Retry
 				</button>
-
-				<span class="text-xs text-text-muted">
-					Page <span class="font-medium text-text">{page}</span> of
-					<span class="font-medium text-text">{totalPages}</span>
-				</span>
-
-				<button
-					type="button"
-					disabled={page >= totalPages}
-					onclick={() => goToPage(page + 1)}
-					class="rounded-lg border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
-				>
-					Next
-				</button>
-			</nav>
-		{/if}
+			{:else if !hasMore && exams.length > 0}
+				<span class="text-xs text-text-muted">All {total} exams loaded</span>
+			{/if}
+		</div>
 	{/if}
 </section>
