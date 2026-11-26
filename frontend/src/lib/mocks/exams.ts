@@ -159,6 +159,226 @@ const MOCK_EXAMS: ExamSummary[] = [
 		lastQuestionIndex: null,
 		bestScorePercent: null,
 		updatedAt: '2026-10-05'
+	},
+	{
+		id: 'ckad-k8s',
+		code: 'CKAD',
+		title: 'Certified Kubernetes Application Developer',
+		vendor: 'CNCF',
+		totalQuestions: 80,
+		answeredCount: 24,
+		lastQuestionIndex: 25,
+		bestScorePercent: null,
+		updatedAt: '2026-10-04'
+	},
+	{
+		id: 'cks-k8s',
+		code: 'CKS',
+		title: 'Certified Kubernetes Security Specialist',
+		vendor: 'CNCF',
+		totalQuestions: 70,
+		answeredCount: 70,
+		lastQuestionIndex: null,
+		bestScorePercent: 86,
+		updatedAt: '2026-10-02'
+	},
+	{
+		id: 'az-204',
+		code: 'AZ-204',
+		title: 'Developing Solutions for Microsoft Azure',
+		vendor: 'Microsoft',
+		totalQuestions: 110,
+		answeredCount: 55,
+		lastQuestionIndex: 56,
+		bestScorePercent: 74,
+		updatedAt: '2026-09-29'
+	},
+	{
+		id: 'az-400',
+		code: 'AZ-400',
+		title: 'Designing and Implementing Microsoft DevOps Solutions',
+		vendor: 'Microsoft',
+		totalQuestions: 125,
+		answeredCount: 0,
+		lastQuestionIndex: null,
+		bestScorePercent: null,
+		updatedAt: '2026-09-27'
+	},
+	{
+		id: 'az-500',
+		code: 'AZ-500',
+		title: 'Microsoft Azure Security Technologies',
+		vendor: 'Microsoft',
+		totalQuestions: 105,
+		answeredCount: 105,
+		lastQuestionIndex: null,
+		bestScorePercent: 88,
+		updatedAt: '2026-09-24'
+	},
+	{
+		id: 'sc-300',
+		code: 'SC-300',
+		title: 'Microsoft Identity and Access Administrator',
+		vendor: 'Microsoft',
+		totalQuestions: 90,
+		answeredCount: 15,
+		lastQuestionIndex: 16,
+		bestScorePercent: null,
+		updatedAt: '2026-09-20'
+	},
+	{
+		id: 'dp-203',
+		code: 'DP-203',
+		title: 'Data Engineering on Microsoft Azure',
+		vendor: 'Microsoft',
+		totalQuestions: 115,
+		answeredCount: 0,
+		lastQuestionIndex: null,
+		bestScorePercent: null,
+		updatedAt: '2026-09-18'
+	},
+	{
+		id: 'ai-102',
+		code: 'AI-102',
+		title: 'Designing and Implementing a Microsoft Azure AI Solution',
+		vendor: 'Microsoft',
+		totalQuestions: 95,
+		answeredCount: 38,
+		lastQuestionIndex: 39,
+		bestScorePercent: 80,
+		updatedAt: '2026-09-15'
+	},
+	{
+		id: 'soa-c02',
+		code: 'SOA-C02',
+		title: 'AWS Certified SysOps Administrator - Associate',
+		vendor: 'AWS',
+		totalQuestions: 120,
+		answeredCount: 120,
+		lastQuestionIndex: null,
+		bestScorePercent: 84,
+		updatedAt: '2026-09-12'
+	},
+	{
+		id: 'dop-c02',
+		code: 'DOP-C02',
+		title: 'AWS Certified DevOps Engineer - Professional',
+		vendor: 'AWS',
+		totalQuestions: 135,
+		answeredCount: 30,
+		lastQuestionIndex: 31,
+		bestScorePercent: null,
+		updatedAt: '2026-09-10'
+	},
+	{
+		id: 'scs-c02',
+		code: 'SCS-C02',
+		title: 'AWS Certified Security - Specialty',
+		vendor: 'AWS',
+		totalQuestions: 100,
+		answeredCount: 0,
+		lastQuestionIndex: null,
+		bestScorePercent: null,
+		updatedAt: '2026-09-07'
+	},
+	{
+		id: 'ans-c01',
+		code: 'ANS-C01',
+		title: 'AWS Certified Advanced Networking - Specialty',
+		vendor: 'AWS',
+		totalQuestions: 95,
+		answeredCount: 0,
+		lastQuestionIndex: null,
+		bestScorePercent: null,
+		updatedAt: '2026-09-04'
+	},
+	{
+		id: 'pde-gcp',
+		code: 'GCP-PDE',
+		title: 'Google Cloud Professional Data Engineer',
+		vendor: 'Google Cloud',
+		totalQuestions: 110,
+		answeredCount: 64,
+		lastQuestionIndex: 65,
+		bestScorePercent: 79,
+		updatedAt: '2026-09-01'
+	},
+	{
+		id: 'pcse-gcp',
+		code: 'GCP-PCSE',
+		title: 'Google Cloud Professional Cloud Security Engineer',
+		vendor: 'Google Cloud',
+		totalQuestions: 90,
+		answeredCount: 90,
+		lastQuestionIndex: null,
+		bestScorePercent: 92,
+		updatedAt: '2026-08-28'
+	},
+	{
+		id: 'a0-220-1101',
+		code: '220-1101',
+		title: 'CompTIA A+ Core 1 Hardware & Networking',
+		vendor: 'CompTIA',
+		totalQuestions: 130,
+		answeredCount: 0,
+		lastQuestionIndex: null,
+		bestScorePercent: null,
+		updatedAt: '2026-08-25'
+	},
+	{
+		id: 'cs0-003',
+		code: 'CS0-003',
+		title: 'CompTIA Cybersecurity Analyst (CySA+)',
+		vendor: 'CompTIA',
+		totalQuestions: 105,
+		answeredCount: 44,
+		lastQuestionIndex: 45,
+		bestScorePercent: 75,
+		updatedAt: '2026-08-22'
+	},
+	{
+		id: 'ccna-200-301',
+		code: '200-301',
+		title: 'Cisco Certified Network Associate (CCNA)',
+		vendor: 'Cisco',
+		totalQuestions: 160,
+		answeredCount: 52,
+		lastQuestionIndex: 53,
+		bestScorePercent: 71,
+		updatedAt: '2026-08-19'
+	},
+	{
+		id: 'tf-assoc-003',
+		code: 'TA-003',
+		title: 'HashiCorp Certified: Terraform Associate',
+		vendor: 'HashiCorp',
+		totalQuestions: 85,
+		answeredCount: 85,
+		lastQuestionIndex: null,
+		bestScorePercent: 95,
+		updatedAt: '2026-08-15'
+	},
+	{
+		id: 'rhcsa-ex200',
+		code: 'EX200',
+		title: 'Red Hat Certified System Administrator (RHCSA)',
+		vendor: 'Red Hat',
+		totalQuestions: 65,
+		answeredCount: 0,
+		lastQuestionIndex: null,
+		bestScorePercent: null,
+		updatedAt: '2026-08-12'
+	},
+	{
+		id: 'pg-admin-17',
+		code: 'PG-ADMIN',
+		title: 'PostgreSQL Administration & Performance Tuning',
+		vendor: 'PostgreSQL',
+		totalQuestions: 95,
+		answeredCount: 19,
+		lastQuestionIndex: 20,
+		bestScorePercent: null,
+		updatedAt: '2026-08-08'
 	}
 ];
 
