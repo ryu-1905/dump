@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -41,7 +41,7 @@
 
 	async function loadQuestion(id: string, topicId: string | null, q: number | null) {
 		const token = ++requestToken;
-		loading = !currentQuestion;
+		loading = untrack(() => !currentQuestion);
 		error = null;
 
 		try {
