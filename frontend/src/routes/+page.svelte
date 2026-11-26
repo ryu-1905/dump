@@ -2,9 +2,11 @@
 	import { onMount } from 'svelte';
 	import { listExams } from '#lib/api/exams';
 	import ExamCard from '#lib/components/ExamCard.svelte';
-	import { getExamStatus, type ExamProgressStatus, type ExamSummary } from '#lib/types/exam';
+	import type { ExamProgressStatus, ExamSummary } from '#lib/types/exam';
 
 	type FilterOption = 'all' | ExamProgressStatus;
+
+	const PAGE_SIZE = 6;
 
 	const filters: { value: FilterOption; label: string }[] = [
 		{ value: 'all', label: 'All' },
@@ -14,30 +16,30 @@
 	];
 
 	let exams = $state<ExamSummary[]>([]);
+	let total = $state(0);
+	let page = $state(1);
+	let totalPages = $state(1);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let search = $state('');
 	let activeFilter = $state<FilterOption>('all');
 
-	let filteredExams = $derived.by(() => {
-		const query = search.trim().toLowerCase();
-		return exams.filter((exam) => {
-			const matchesFilter = activeFilter === 'all' || getExamStatus(exam) === activeFilter;
-			if (!matchesFilter) return false;
-			if (!query) return true;
-			return (
-				exam.code.toLowerCase().includes(query) ||
-				exam.title.toLowerCase().includes(query) ||
-				exam.vendor.toLowerCase().includes(query)
-			);
-		});
-	});
+	let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
-	async function loadExams() {
+	async function loadExams(targetPage = page) {
 		loading = true;
 		error = null;
 		try {
-			exams = await listExams();
+			const res = await listExams({
+				page: targetPage,
+				limit: PAGE_SIZE,
+				q: search,
+				status: activeFilter
+			});
+			exams = res.items;
+			total = res.total;
+			page = res.page;
+			totalPages = res.totalPages;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load exams';
 		} finally {
@@ -45,8 +47,27 @@
 		}
 	}
 
+	function handleSearchInput() {
+		clearTimeout(searchTimer);
+		searchTimer = setTimeout(() => {
+			void loadExams(1);
+		}, 300);
+	}
+
+	function selectFilter(value: FilterOption) {
+		if (activeFilter === value) return;
+		activeFilter = value;
+		void loadExams(1);
+	}
+
+	function goToPage(nextPage: number) {
+		if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
+		void loadExams(nextPage);
+	}
+
 	onMount(() => {
-		void loadExams();
+		void loadExams(1);
+		return () => clearTimeout(searchTimer);
 	});
 </script>
 
@@ -61,7 +82,8 @@
 		</div>
 		{#if !loading && !error}
 			<p class="text-xs text-text-muted">
-				Showing <span class="font-medium text-text">{filteredExams.length}</span> of {exams.length} exams
+				Showing <span class="font-medium text-text">{exams.length}</span> of
+				<span class="font-medium text-text">{total}</span> exams
 			</p>
 		{/if}
 	</div>
@@ -72,6 +94,7 @@
 			<input
 				type="search"
 				bind:value={search}
+				oninput={handleSearchInput}
 				placeholder="Search by code, title, vendor..."
 				aria-label="Search exams"
 				class="w-full rounded-lg border border-border bg-surface px-3.5 py-2 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none"
@@ -83,7 +106,7 @@
 				{@const selected = activeFilter === filter.value}
 				<button
 					type="button"
-					onclick={() => (activeFilter = filter.value)}
+					onclick={() => selectFilter(filter.value)}
 					class={[
 						'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
 						selected
@@ -101,7 +124,7 @@
 	<!-- Content States -->
 	{#if loading}
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-			{#each [1, 2, 3] as item (item)}
+			{#each [1, 2, 3, 4, 5, 6] as item (item)}
 				<div class="h-48 animate-pulse rounded-xl border border-border bg-surface p-5"></div>
 			{/each}
 		</div>
@@ -111,22 +134,52 @@
 			<p class="mt-1 text-xs text-red-300/80">{error}</p>
 			<button
 				type="button"
-				onclick={() => void loadExams()}
+				onclick={() => void loadExams(page)}
 				class="mt-3 rounded-lg border border-red-500/30 bg-bg px-3 py-1.5 text-xs font-medium text-text hover:bg-surface"
 			>
 				Retry
 			</button>
 		</div>
-	{:else if filteredExams.length === 0}
+	{:else if exams.length === 0}
 		<div class="rounded-xl border border-border bg-surface p-10 text-center">
 			<p class="text-sm font-medium text-text">No exams match your filter</p>
 			<p class="mt-1 text-xs text-text-muted">Try clearing the search query or switching status.</p>
 		</div>
 	{:else}
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-			{#each filteredExams as exam (exam.id)}
+			{#each exams as exam (exam.id)}
 				<ExamCard {exam} />
 			{/each}
 		</div>
+
+		{#if totalPages > 1}
+			<nav
+				aria-label="Pagination"
+				class="flex items-center justify-between border-t border-border pt-4"
+			>
+				<button
+					type="button"
+					disabled={page <= 1}
+					onclick={() => goToPage(page - 1)}
+					class="rounded-lg border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
+				>
+					Previous
+				</button>
+
+				<span class="text-xs text-text-muted">
+					Page <span class="font-medium text-text">{page}</span> of
+					<span class="font-medium text-text">{totalPages}</span>
+				</span>
+
+				<button
+					type="button"
+					disabled={page >= totalPages}
+					onclick={() => goToPage(page + 1)}
+					class="rounded-lg border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
+				>
+					Next
+				</button>
+			</nav>
+		{/if}
 	{/if}
 </section>

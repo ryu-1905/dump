@@ -12,6 +12,21 @@ export interface ExamSummary {
 	updatedAt: string;
 }
 
+export interface ExamListParams {
+	page?: number;
+	limit?: number;
+	q?: string;
+	status?: 'all' | ExamProgressStatus;
+}
+
+export interface PaginatedExamsResponse {
+	items: ExamSummary[];
+	total: number;
+	page: number;
+	limit: number;
+	totalPages: number;
+}
+
 export function getExamStatus(exam: ExamSummary): ExamProgressStatus {
 	if (exam.answeredCount <= 0) return 'not_started';
 	if (exam.answeredCount >= exam.totalQuestions) return 'completed';
