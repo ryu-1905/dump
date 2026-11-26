@@ -177,6 +177,11 @@
 				<p class="mt-2 text-sm leading-relaxed text-text-muted">
 					{exam.description}
 				</p>
+				{#if headerState.showVi && exam.descriptionVi}
+					<p class="mt-1.5 text-sm leading-relaxed text-accent/90">
+						{exam.descriptionVi}
+					</p>
+				{/if}
 
 				<!-- Summary Stats -->
 				<div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -245,6 +250,9 @@
 								<p class="truncate text-sm font-medium text-text">
 									{i + 1}. {topic.name}
 								</p>
+								{#if headerState.showVi && topic.nameVi}
+									<p class="mt-0.5 truncate text-xs text-accent/90">{topic.nameVi}</p>
+								{/if}
 								<p class="mt-0.5 text-xs text-text-muted">{share}% of exam</p>
 							</div>
 							<span
@@ -286,6 +294,13 @@
 				<p class="text-sm leading-relaxed text-text sm:text-base">
 					{currentQuestion.prompt}
 				</p>
+				{#if headerState.showVi && currentQuestion.promptVi}
+					<p
+						class="rounded-lg border border-accent/20 bg-accent/5 px-3.5 py-2.5 text-sm leading-relaxed text-accent/90"
+					>
+						{currentQuestion.promptVi}
+					</p>
+				{/if}
 
 				<!-- Options -->
 				<div class="space-y-2.5">
@@ -318,7 +333,12 @@
 							>
 								{option.label}
 							</span>
-							<span class="pt-0.5 leading-snug">{option.text}</span>
+							<div class="pt-0.5 leading-snug">
+								<p>{option.text}</p>
+								{#if headerState.showVi && option.textVi}
+									<p class="mt-1 text-xs text-accent/90">{option.textVi}</p>
+								{/if}
+							</div>
 						</button>
 					{/each}
 				</div>
@@ -341,6 +361,9 @@
 							{currentAnswer.isCorrect ? 'Correct!' : 'Incorrect'}
 						</p>
 						<p class="mt-1 text-text">{currentQuestion.explanation}</p>
+						{#if headerState.showVi && currentQuestion.explanationVi}
+							<p class="mt-1.5 text-accent/90">{currentQuestion.explanationVi}</p>
+						{/if}
 					</div>
 				{/if}
 

@@ -435,31 +435,45 @@ function buildMockQuestions(exam: ExamSummary): ExamQuestion[] {
 		const multipleChoice = index % 5 === 0;
 		const correctOptionIds = multipleChoice ? ['a', 'c'] : [labels[idx % 4].toLowerCase()];
 
+		const isMb330First = index === 1 && exam.id === 'mb-330';
+
 		return {
 			id: `${exam.id}-q-${index}`,
 			index,
-			prompt:
-				index === 1 && exam.id === 'mb-330'
-					? 'A company uses Dynamics 365 Supply Chain Management. You need to configure warehouse location directives so put-away work selects bulk locations only when pallet quantities are received. Which setup should you configure?'
-					: `[${exam.code}] Sample question #${index}: Which configuration best satisfies the operational requirement described for ${exam.title}?`,
+			prompt: isMb330First
+				? 'A company uses Dynamics 365 Supply Chain Management. You need to configure warehouse location directives so put-away work selects bulk locations only when pallet quantities are received. Which setup should you configure?'
+				: `[${exam.code}] Sample question #${index}: Which configuration best satisfies the operational requirement described for ${exam.title}?`,
+			promptVi: isMb330First
+				? 'Một công ty sử dụng Dynamics 365 Supply Chain Management. Bạn cần cấu hình chỉ dẫn vị trí kho (location directives) để công việc cất hàng chỉ chọn khu vực bulk khi nhận đủ số lượng theo pallet. Bạn nên cấu hình thiết lập nào?'
+				: `[${exam.code}] Câu hỏi mẫu #${index}: Cấu hình nào đáp ứng tốt nhất yêu cầu vận hành cho ${exam.title}?`,
 			multipleChoice,
 			options: labels.map((label) => ({
 				id: label.toLowerCase(),
 				label,
-				text:
-					index === 1 && exam.id === 'mb-330'
-						? {
-								A: 'Configure a location directive line with Restrict by unit set to Pallet.',
-								B: 'Enable Allow split on the work template.',
-								C: 'Assign a fixed picking location to the item.',
-								D: 'Set the warehouse inventory status to Blocked.'
-							}[label]
-						: `Option ${label} for ${exam.code} question #${index}`
+				text: isMb330First
+					? {
+							A: 'Configure a location directive line with Restrict by unit set to Pallet.',
+							B: 'Enable Allow split on the work template.',
+							C: 'Assign a fixed picking location to the item.',
+							D: 'Set the warehouse inventory status to Blocked.'
+						}[label]
+					: `Option ${label} for ${exam.code} question #${index}`,
+				textVi: isMb330First
+					? {
+							A: 'Cấu hình dòng location directive với trường Restrict by unit đặt là Pallet.',
+							B: 'Bật tùy chọn Allow split trên work template.',
+							C: 'Gán một vị trí lấy hàng cố định cho sản phẩm.',
+							D: 'Đặt trạng thái tồn kho của kho thành Blocked.'
+						}[label]
+					: `Lựa chọn ${label} cho câu #${index} của đề ${exam.code}`
 			})),
 			correctOptionIds,
 			explanation: multipleChoice
 				? `Options ${correctOptionIds.map((id) => id.toUpperCase()).join(' and ')} are both required for ${exam.code} question #${index}.`
-				: `Option ${correctOptionIds[0].toUpperCase()} is correct because it directly enforces the required rule for ${exam.code} question #${index}.`
+				: `Option ${correctOptionIds[0].toUpperCase()} is correct because it directly enforces the required rule for ${exam.code} question #${index}.`,
+			explanationVi: multipleChoice
+				? `Cả hai đáp án ${correctOptionIds.map((id) => id.toUpperCase()).join(' và ')} đều cần thiết cho câu #${index} của đề ${exam.code}.`
+				: `Đáp án ${correctOptionIds[0].toUpperCase()} đúng vì nó áp dụng trực tiếp quy tắc yêu cầu cho câu #${index} của đề ${exam.code}.`
 		};
 	});
 }
@@ -501,10 +515,30 @@ export function mockListExams(params: ExamListParams = {}): Promise<PaginatedExa
 function buildMockTopics(exam: ExamSummary): ExamTopic[] {
 	if (exam.id === 'mb-330') {
 		return [
-			{ id: 'pim', name: 'Implement Product Information Management', questionCount: 30 },
-			{ id: 'inv', name: 'Implement Inventory Management', questionCount: 35 },
-			{ id: 'scp', name: 'Implement Supply Chain Processes', questionCount: 30 },
-			{ id: 'wms', name: 'Implement Warehouse & Transportation Management', questionCount: 25 }
+			{
+				id: 'pim',
+				name: 'Implement Product Information Management',
+				nameVi: 'Triển khai quản lý thông tin sản phẩm',
+				questionCount: 30
+			},
+			{
+				id: 'inv',
+				name: 'Implement Inventory Management',
+				nameVi: 'Triển khai quản lý tồn kho',
+				questionCount: 35
+			},
+			{
+				id: 'scp',
+				name: 'Implement Supply Chain Processes',
+				nameVi: 'Triển khai quy trình chuỗi cung ứng',
+				questionCount: 30
+			},
+			{
+				id: 'wms',
+				name: 'Implement Warehouse & Transportation Management',
+				nameVi: 'Triển khai quản lý kho và vận chuyển',
+				questionCount: 25
+			}
 		];
 	}
 
@@ -514,10 +548,30 @@ function buildMockTopics(exam: ExamSummary): ExamTopic[] {
 	const q4 = Math.max(1, exam.totalQuestions - (q1 + q2 + q3));
 
 	return [
-		{ id: 'core', name: 'Core Architecture & Configuration', questionCount: q1 },
-		{ id: 'ops', name: 'Operations, Monitoring & Maintenance', questionCount: q2 },
-		{ id: 'sec', name: 'Security, Identity & Compliance', questionCount: q3 },
-		{ id: 'adv', name: 'Troubleshooting & Best Practices', questionCount: q4 }
+		{
+			id: 'core',
+			name: 'Core Architecture & Configuration',
+			nameVi: 'Kiến trúc cốt lõi & cấu hình',
+			questionCount: q1
+		},
+		{
+			id: 'ops',
+			name: 'Operations, Monitoring & Maintenance',
+			nameVi: 'Vận hành, giám sát & bảo trì',
+			questionCount: q2
+		},
+		{
+			id: 'sec',
+			name: 'Security, Identity & Compliance',
+			nameVi: 'Bảo mật, định danh & tuân thủ',
+			questionCount: q3
+		},
+		{
+			id: 'adv',
+			name: 'Troubleshooting & Best Practices',
+			nameVi: 'Xử lý sự cố & phương pháp tối ưu',
+			questionCount: q4
+		}
 	];
 }
 
@@ -536,6 +590,10 @@ export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload
 			examId === 'mb-330'
 				? 'Practice questions covering product information, inventory control, procurement, sales, and warehouse management in Dynamics 365 Supply Chain Management.'
 				: `Comprehensive practice set for ${summary.code} (${summary.title}) organized by exam domains.`,
+		descriptionVi:
+			examId === 'mb-330'
+				? 'Bộ câu hỏi luyện tập về quản lý thông tin sản phẩm, kiểm soát tồn kho, mua hàng, bán hàng và quản lý kho trong Dynamics 365 Supply Chain Management.'
+				: `Bộ câu hỏi luyện tập tổng hợp cho ${summary.code} (${summary.title}), phân chia theo các nhóm chủ đề của kỳ thi.`,
 		topics: buildMockTopics(summary)
 	};
 	const questions = buildMockQuestions(summary);

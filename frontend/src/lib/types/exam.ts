@@ -31,16 +31,19 @@ export interface QuestionOption {
 	id: string;
 	label: string;
 	text: string;
+	textVi?: string;
 }
 
 export interface ExamQuestion {
 	id: string;
 	index: number;
 	prompt: string;
+	promptVi?: string;
 	multipleChoice: boolean;
 	options: QuestionOption[];
 	correctOptionIds: string[];
 	explanation: string;
+	explanationVi?: string;
 }
 
 export interface ExamAnswerRecord {
@@ -52,11 +55,13 @@ export interface ExamAnswerRecord {
 export interface ExamTopic {
 	id: string;
 	name: string;
+	nameVi?: string;
 	questionCount: number;
 }
 
 export interface ExamDetail extends ExamSummary {
 	description: string;
+	descriptionVi?: string;
 	topics: ExamTopic[];
 }
 
