@@ -13,7 +13,7 @@
 </script>
 
 <header class="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
-	<div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+	<div class="relative mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
 		<!-- Brand / Logo -->
 		<a
 			href={resolve('/')}
@@ -28,7 +28,10 @@
 		</a>
 
 		<!-- Desktop Navigation -->
-		<nav aria-label="Main navigation" class="hidden items-center gap-1 md:flex">
+		<nav
+			aria-label="Main navigation"
+			class="hidden items-center gap-1 md:absolute md:left-1/2 md:flex md:-translate-x-1/2"
+		>
 			{#each navItems as item (item.href)}
 				{@const active = page.url.pathname === item.href}
 				<a
