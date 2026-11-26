@@ -583,6 +583,23 @@ function buildMockTopics(exam: ExamSummary): ExamTopic[] {
 	];
 }
 
+function buildSeededAnswers(
+	exam: ExamSummary,
+	questions: ExamQuestion[]
+): Record<string, ExamAnswerRecord> {
+	const seeded: Record<string, ExamAnswerRecord> = {};
+	const count = Math.min(exam.answeredCount, questions.length);
+	for (let i = 0; i < count; i++) {
+		const q = questions[i];
+		seeded[q.id] = {
+			questionId: q.id,
+			selectedOptionIds: [...q.correctOptionIds],
+			isCorrect: true
+		};
+	}
+	return seeded;
+}
+
 export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload> {
 	const baseExam = MOCK_EXAMS.find((item) => item.id === examId);
 	if (!baseExam) {
@@ -606,11 +623,12 @@ export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload
 		topics
 	};
 	const questions = buildMockQuestions(summary, topics);
+	const answers = entry?.answers ?? buildSeededAnswers(baseExam, questions);
 
 	return Promise.resolve({
 		exam,
 		questions,
-		answers: entry?.answers ?? {}
+		answers
 	});
 }
 
@@ -641,7 +659,10 @@ export function mockSubmitAnswer(
 	};
 
 	const store = readProgressStore();
-	const current = store[examId] ?? { lastQuestionIndex: null, answers: {} };
+	const current = store[examId] ?? {
+		lastQuestionIndex: baseExam.lastQuestionIndex,
+		answers: buildSeededAnswers(baseExam, questions)
+	};
 	store[examId] = {
 		lastQuestionIndex: payload.questionIndex,
 		answers: {

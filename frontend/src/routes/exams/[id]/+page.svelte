@@ -13,6 +13,7 @@
 	let exam = $state<ExamDetail | null>(null);
 	let questions = $state<ExamQuestion[]>([]);
 	let answers = $state<Record<string, ExamAnswerRecord>>({});
+	let lastQuestionIndex = $state<number | null>(null);
 	let currentIndex = $state(1);
 	let selectedOptionIds = $state<string[]>([]);
 	let loading = $state(true);
@@ -27,11 +28,14 @@
 	);
 	let currentQuestion = $derived(practiceQuestions[currentIndex - 1] ?? null);
 	let currentAnswer = $derived(currentQuestion ? (answers[currentQuestion.id] ?? null) : null);
-	let answeredCount = $derived(Math.max(exam?.answeredCount ?? 0, Object.keys(answers).length));
+	let answeredCount = $derived(Object.keys(answers).length);
 	let resumeIndex = $derived(
-		exam?.lastQuestionIndex && exam.lastQuestionIndex <= questions.length
-			? exam.lastQuestionIndex
-			: 1
+		lastQuestionIndex && lastQuestionIndex <= questions.length ? lastQuestionIndex : 1
+	);
+	let continueTopicId = $derived(
+		lastQuestionIndex && lastQuestionIndex <= questions.length
+			? (questions[lastQuestionIndex - 1]?.topicId ?? null)
+			: null
 	);
 
 	function syncSelectionForQuestion(index: number, list: ExamQuestion[] = practiceQuestions) {
@@ -56,8 +60,12 @@
 	function startTopicPractice(topicId: string) {
 		activeTopicId = topicId;
 		const list = questions.filter((q) => q.topicId === topicId);
-		const firstUnansweredIdx = list.findIndex((q) => !answers[q.id]);
-		const startAt = firstUnansweredIdx >= 0 ? firstUnansweredIdx + 1 : 1;
+		let startAt = 1;
+		if (topicId === continueTopicId && lastQuestionIndex) {
+			const targetQuestion = questions[lastQuestionIndex - 1];
+			const pos = targetQuestion ? list.findIndex((q) => q.id === targetQuestion.id) : -1;
+			if (pos >= 0) startAt = pos + 1;
+		}
 		currentIndex = startAt;
 		syncSelectionForQuestion(startAt, list);
 		mode = 'practice';
@@ -106,6 +114,7 @@
 				...answers,
 				[currentQuestion.id]: record
 			};
+			lastQuestionIndex = currentQuestion.index;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to submit answer';
 		} finally {
@@ -122,6 +131,7 @@
 			headerState.examCode = payload.exam.code;
 			questions = payload.questions;
 			answers = payload.answers;
+			lastQuestionIndex = payload.exam.lastQuestionIndex;
 			const startIndex =
 				payload.exam.lastQuestionIndex && payload.exam.lastQuestionIndex <= payload.questions.length
 					? payload.exam.lastQuestionIndex
@@ -303,18 +313,12 @@
 									onclick={() => startTopicPractice(topic.id)}
 									class={[
 										'rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors',
-										topicAnswered > 0 && topicAnswered < topic.questionCount
+										topic.id === continueTopicId
 											? 'bg-accent text-white hover:bg-accent-hover'
 											: 'border border-border bg-surface text-text hover:bg-surface-hover'
 									]}
 								>
-									{#if topicAnswered >= topic.questionCount}
-										Review
-									{:else if topicAnswered > 0}
-										Continue
-									{:else}
-										Start
-									{/if}
+									{topic.id === continueTopicId ? 'Continue' : 'Start'}
 								</button>
 							</div>
 						</div>
