@@ -1,19 +1,33 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { getExamPractice, submitExamAnswer } from '#lib/api/exams';
+	import { getExamQuestion, submitExamAnswer } from '#lib/api/exams';
 	import { headerState } from '#lib/state/header.svelte';
-	import type { ExamAnswerRecord, ExamDetail, ExamQuestion } from '#lib/types/exam';
+	import type {
+		ExamAnswerRecord,
+		ExamDetail,
+		ExamQuestion,
+		QuestionNavStatus
+	} from '#lib/types/exam';
 
 	let examId = $derived(page.params.id ?? '');
 	let topicIdParam = $derived(page.url.searchParams.get('topic'));
-	let questionParam = $derived(Number(page.url.searchParams.get('q') ?? ''));
+	let questionParam = $derived.by(() => {
+		const raw = page.url.searchParams.get('q');
+		if (!raw) return null;
+		const parsed = Number(raw);
+		return Number.isInteger(parsed) && parsed >= 1 ? parsed : null;
+	});
 
 	let exam = $state<ExamDetail | null>(null);
-	let questions = $state<ExamQuestion[]>([]);
-	let answers = $state<Record<string, ExamAnswerRecord>>({});
+	let currentQuestion = $state<ExamQuestion | null>(null);
+	let currentAnswer = $state<ExamAnswerRecord | null>(null);
 	let currentIndex = $state(1);
+	let totalInScope = $state(0);
+	let statuses = $state<QuestionNavStatus[]>([]);
+	let answeredCount = $state(0);
 	let selectedOptionIds = $state<string[]>([]);
 	let loading = $state(true);
 	let submitting = $state(false);
@@ -22,31 +36,50 @@
 	let activeTopic = $derived(
 		topicIdParam ? (exam?.topics.find((t) => t.id === topicIdParam) ?? null) : null
 	);
-	let practiceQuestions = $derived(
-		topicIdParam ? questions.filter((q) => q.topicId === topicIdParam) : questions
-	);
-	let currentQuestion = $derived(practiceQuestions[currentIndex - 1] ?? null);
-	let currentAnswer = $derived(currentQuestion ? (answers[currentQuestion.id] ?? null) : null);
-	let answeredCount = $derived(Object.keys(answers).length);
 
-	function syncSelectionForQuestion(index: number, list: ExamQuestion[] = practiceQuestions) {
-		const q = list[index - 1];
-		if (!q) {
-			selectedOptionIds = [];
-			return;
+	let requestToken = 0;
+
+	async function loadQuestion(id: string, topicId: string | null, q: number | null) {
+		const token = ++requestToken;
+		loading = !currentQuestion;
+		error = null;
+
+		try {
+			const payload = await getExamQuestion(id, { topicId, q });
+			if (token !== requestToken) return;
+
+			exam = payload.exam;
+			headerState.examCode = payload.exam.code;
+			currentQuestion = payload.question;
+			currentAnswer = payload.answer;
+			currentIndex = payload.currentIndex;
+			totalInScope = payload.totalInScope;
+			statuses = payload.statuses;
+			answeredCount = payload.answeredCount;
+			selectedOptionIds = payload.answer ? [...payload.answer.selectedOptionIds] : [];
+		} catch (err) {
+			if (token !== requestToken) return;
+			error = err instanceof Error ? err.message : 'Failed to load question';
+		} finally {
+			if (token === requestToken) {
+				loading = false;
+			}
 		}
-		const saved = answers[q.id];
-		selectedOptionIds = saved ? [...saved.selectedOptionIds] : [];
 	}
 
-	function goToQuestion(index: number) {
-		if (index < 1 || index > practiceQuestions.length) return;
-		currentIndex = index;
-		syncSelectionForQuestion(index);
+	async function goToQuestion(nextIndex: number) {
+		if (nextIndex < 1 || nextIndex > totalInScope || nextIndex === currentIndex) return;
+		const base = resolve('/exams/[id]/practice', { id: examId });
+		const parts: string[] = [];
+		if (topicIdParam) parts.push(`topic=${encodeURIComponent(topicIdParam)}`);
+		parts.push(`q=${encodeURIComponent(String(nextIndex))}`);
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		await goto(`${base}?${parts.join('&')}`);
 	}
 
-	function toggleOption(optionId: string) {
+	async function selectOption(optionId: string) {
 		if (!currentQuestion || submitting) return;
+
 		if (currentQuestion.multipleChoice) {
 			if (selectedOptionIds.includes(optionId)) {
 				selectedOptionIds = selectedOptionIds.filter((id) => id !== optionId);
@@ -56,10 +89,9 @@
 		} else {
 			selectedOptionIds = [optionId];
 		}
-	}
 
-	async function checkAnswer() {
-		if (!currentQuestion || selectedOptionIds.length === 0 || submitting) return;
+		if (selectedOptionIds.length === 0) return;
+
 		submitting = true;
 		error = null;
 		try {
@@ -68,10 +100,14 @@
 				questionIndex: currentQuestion.index,
 				selectedOptionIds
 			});
-			answers = {
-				...answers,
-				[currentQuestion.id]: record
-			};
+			const wasUnanswered = currentAnswer === null;
+			currentAnswer = record;
+			if (wasUnanswered) {
+				answeredCount += 1;
+			}
+			const nextStatuses = [...statuses];
+			nextStatuses[currentIndex - 1] = record.isCorrect ? 'correct' : 'incorrect';
+			statuses = nextStatuses;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to submit answer';
 		} finally {
@@ -79,47 +115,14 @@
 		}
 	}
 
-	async function loadPractice(id: string) {
-		loading = true;
-		error = null;
-		try {
-			const payload = await getExamPractice(id);
-			exam = payload.exam;
-			headerState.examCode = payload.exam.code;
-			questions = payload.questions;
-			answers = payload.answers;
-
-			const list = topicIdParam
-				? payload.questions.filter((q) => q.topicId === topicIdParam)
-				: payload.questions;
-
-			let startIndex = 1;
-			if (Number.isInteger(questionParam) && questionParam >= 1 && questionParam <= list.length) {
-				startIndex = questionParam;
-			} else if (
-				!topicIdParam &&
-				payload.exam.lastQuestionIndex &&
-				payload.exam.lastQuestionIndex <= list.length
-			) {
-				startIndex = payload.exam.lastQuestionIndex;
-			}
-
-			currentIndex = startIndex;
-			syncSelectionForQuestion(startIndex, list);
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load exam';
-		} finally {
-			loading = false;
-		}
-	}
-
-	onMount(() => {
+	$effect(() => {
 		if (examId) {
-			void loadPractice(examId);
+			void loadQuestion(examId, topicIdParam, questionParam);
 		}
-		return () => {
-			headerState.examCode = null;
-		};
+	});
+
+	onDestroy(() => {
+		headerState.examCode = null;
 	});
 </script>
 
@@ -136,7 +139,7 @@
 		{#if exam}
 			<div class="flex items-center gap-3 text-xs text-text-muted">
 				<span>
-					Answered: <strong class="font-medium text-text">{answeredCount}</strong> / {questions.length}
+					Answered: <strong class="font-medium text-text">{answeredCount}</strong> / {exam.totalQuestions}
 				</span>
 			</div>
 		{/if}
@@ -181,7 +184,7 @@
 			<div class="space-y-5 rounded-xl border border-border bg-surface p-6">
 				<div class="flex items-center justify-between border-b border-border pb-3">
 					<span class="text-xs font-semibold tracking-wide text-accent uppercase">
-						Question {currentIndex} of {practiceQuestions.length}
+						Question {currentIndex} of {totalInScope}
 					</span>
 					<span class="text-xs text-text-muted">
 						{currentQuestion.multipleChoice ? 'Select all that apply' : 'Single choice'}
@@ -208,9 +211,10 @@
 
 						<button
 							type="button"
-							onclick={() => toggleOption(option.id)}
+							disabled={submitting}
+							onclick={() => void selectOption(option.id)}
 							class={[
-								'flex w-full items-start gap-3 rounded-lg border p-3.5 text-left text-sm transition-colors',
+								'flex w-full items-start gap-3 rounded-lg border p-3.5 text-left text-sm transition-colors disabled:opacity-70',
 								isRevealed && isRightOption
 									? 'border-emerald-500/50 bg-emerald-500/10 text-text'
 									: isRevealed && isSelected && !isRightOption
@@ -269,54 +273,42 @@
 					<button
 						type="button"
 						disabled={currentIndex <= 1}
-						onclick={() => goToQuestion(currentIndex - 1)}
+						onclick={() => void goToQuestion(currentIndex - 1)}
 						class="rounded-lg border border-border bg-bg px-3.5 py-2 text-xs font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
 					>
 						Previous
 					</button>
 
-					<div class="flex items-center gap-2">
-						<button
-							type="button"
-							disabled={selectedOptionIds.length === 0 || submitting}
-							onclick={() => void checkAnswer()}
-							class="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
-						>
-							{submitting ? 'Saving...' : currentAnswer ? 'Update Answer' : 'Check Answer'}
-						</button>
-
-						<button
-							type="button"
-							disabled={currentIndex >= practiceQuestions.length}
-							onclick={() => goToQuestion(currentIndex + 1)}
-							class="rounded-lg border border-border bg-bg px-3.5 py-2 text-xs font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
-						>
-							Next
-						</button>
-					</div>
+					<button
+						type="button"
+						disabled={currentIndex >= totalInScope}
+						onclick={() => void goToQuestion(currentIndex + 1)}
+						class="rounded-lg border border-border bg-bg px-3.5 py-2 text-xs font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
+					>
+						Next
+					</button>
 				</div>
 			</div>
 
 			<!-- Question Navigator -->
 			<aside class="h-fit rounded-xl border border-border bg-surface p-4">
 				<h2 class="text-xs font-semibold tracking-wide text-text-muted uppercase">
-					Questions ({practiceQuestions.length})
+					Questions ({totalInScope})
 				</h2>
 				<div class="mt-3 grid max-h-96 grid-cols-5 gap-1.5 overflow-y-auto pr-1">
-					{#each practiceQuestions as q, idx (q.id)}
+					{#each statuses as status, idx (idx)}
 						{@const navIndex = idx + 1}
 						{@const isCurrent = navIndex === currentIndex}
-						{@const ans = answers[q.id]}
 						<button
 							type="button"
-							onclick={() => goToQuestion(navIndex)}
+							onclick={() => void goToQuestion(navIndex)}
 							class={[
 								'flex h-8 items-center justify-center rounded-md border text-xs font-medium transition-colors',
 								isCurrent
 									? 'border-accent bg-accent text-white'
-									: ans?.isCorrect
+									: status === 'correct'
 										? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
-										: ans
+										: status === 'incorrect'
 											? 'border-red-500/40 bg-red-500/15 text-red-300'
 											: 'border-border bg-bg text-text-muted hover:bg-surface-hover hover:text-text'
 							]}

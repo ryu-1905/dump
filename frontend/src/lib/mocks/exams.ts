@@ -5,9 +5,11 @@ import {
 	type ExamListParams,
 	type ExamPracticePayload,
 	type ExamQuestion,
+	type ExamQuestionPayload,
 	type ExamSummary,
 	type ExamTopic,
 	type PaginatedExamsResponse,
+	type QuestionNavStatus,
 	type SubmitAnswerRequest
 } from '#lib/types/exam';
 
@@ -629,6 +631,87 @@ export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload
 		exam,
 		questions,
 		answers
+	});
+}
+
+export function mockGetExamQuestion(
+	examId: string,
+	options: { topicId?: string | null; q?: number | null } = {}
+): Promise<ExamQuestionPayload> {
+	const baseExam = MOCK_EXAMS.find((item) => item.id === examId);
+	if (!baseExam) {
+		return Promise.reject(new Error(`Exam "${examId}" not found`));
+	}
+
+	const store = readProgressStore();
+	const existing = store[examId];
+	const summary = mergeExamWithProgress(baseExam, existing);
+	const topics = buildMockTopics(summary);
+	const allQuestions = buildMockQuestions(summary, topics);
+	const answers = existing?.answers ?? buildSeededAnswers(baseExam, allQuestions);
+
+	const scopedQuestions = options.topicId
+		? allQuestions.filter((item) => item.topicId === options.topicId)
+		: allQuestions;
+
+	if (scopedQuestions.length === 0) {
+		return Promise.reject(new Error(`No questions found for topic "${options.topicId}"`));
+	}
+
+	let currentIndex = 1;
+	if (
+		options.q &&
+		Number.isInteger(options.q) &&
+		options.q >= 1 &&
+		options.q <= scopedQuestions.length
+	) {
+		currentIndex = options.q;
+	} else if (
+		!options.topicId &&
+		summary.lastQuestionIndex &&
+		summary.lastQuestionIndex >= 1 &&
+		summary.lastQuestionIndex <= scopedQuestions.length
+	) {
+		currentIndex = summary.lastQuestionIndex;
+	}
+
+	const question = scopedQuestions[currentIndex - 1];
+
+	// Record the active question as lastQuestionIndex.
+	store[examId] = {
+		lastQuestionIndex: question.index,
+		answers
+	};
+	writeProgressStore(store);
+
+	const exam: ExamDetail = {
+		...summary,
+		lastQuestionIndex: question.index,
+		description:
+			examId === 'mb-330'
+				? 'Practice questions covering product information, inventory control, procurement, sales, and warehouse management in Dynamics 365 Supply Chain Management.'
+				: `Comprehensive practice set for ${summary.code} (${summary.title}) organized by exam domains.`,
+		descriptionVi:
+			examId === 'mb-330'
+				? 'Bộ câu hỏi luyện tập về quản lý thông tin sản phẩm, kiểm soát tồn kho, mua hàng, bán hàng và quản lý kho trong Dynamics 365 Supply Chain Management.'
+				: `Bộ câu hỏi luyện tập tổng hợp cho ${summary.code} (${summary.title}), phân chia theo các nhóm chủ đề của kỳ thi.`,
+		topics
+	};
+
+	const statuses: QuestionNavStatus[] = scopedQuestions.map((item) => {
+		const rec = answers[item.id];
+		if (!rec) return 'unanswered';
+		return rec.isCorrect ? 'correct' : 'incorrect';
+	});
+
+	return Promise.resolve({
+		exam,
+		totalInScope: scopedQuestions.length,
+		currentIndex,
+		question,
+		answer: answers[question.id] ?? null,
+		statuses,
+		answeredCount: Object.keys(answers).length
 	});
 }
 

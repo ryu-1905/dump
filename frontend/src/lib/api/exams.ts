@@ -1,9 +1,15 @@
 import { apiRequest, USE_MOCK_API } from '#lib/api/client';
-import { mockGetExamPractice, mockListExams, mockSubmitAnswer } from '#lib/mocks/exams';
+import {
+	mockGetExamPractice,
+	mockGetExamQuestion,
+	mockListExams,
+	mockSubmitAnswer
+} from '#lib/mocks/exams';
 import type {
 	ExamAnswerRecord,
 	ExamListParams,
 	ExamPracticePayload,
+	ExamQuestionPayload,
 	PaginatedExamsResponse,
 	SubmitAnswerRequest
 } from '#lib/types/exam';
@@ -34,6 +40,27 @@ export async function getExamPractice(examId: string): Promise<ExamPracticePaylo
 		return mockGetExamPractice(examId);
 	}
 	return apiRequest<ExamPracticePayload>(`/api/exams/${encodeURIComponent(examId)}/practice`);
+}
+
+export async function getExamQuestion(
+	examId: string,
+	options: { topicId?: string | null; q?: number | null } = {}
+): Promise<ExamQuestionPayload> {
+	getClientId();
+
+	if (USE_MOCK_API) {
+		return mockGetExamQuestion(examId, options);
+	}
+
+	const qs = new URLSearchParams();
+	if (options.topicId) qs.set('topic', options.topicId);
+	if (options.q !== undefined && options.q !== null) qs.set('q', String(options.q));
+	const query = qs.toString();
+	return apiRequest<ExamQuestionPayload>(
+		query
+			? `/api/exams/${encodeURIComponent(examId)}/questions?${query}`
+			: `/api/exams/${encodeURIComponent(examId)}/questions`
+	);
 }
 
 export async function submitExamAnswer(

@@ -66,6 +66,18 @@ export interface ExamDetail extends ExamSummary {
 	topics: ExamTopic[];
 }
 
+export type QuestionNavStatus = 'unanswered' | 'correct' | 'incorrect';
+
+export interface ExamQuestionPayload {
+	exam: ExamDetail;
+	totalInScope: number;
+	currentIndex: number;
+	question: ExamQuestion;
+	answer: ExamAnswerRecord | null;
+	statuses: QuestionNavStatus[];
+	answeredCount: number;
+}
+
 export interface ExamPracticePayload {
 	exam: ExamDetail;
 	questions: ExamQuestion[];
