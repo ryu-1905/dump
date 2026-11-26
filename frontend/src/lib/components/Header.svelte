@@ -13,7 +13,7 @@
 </script>
 
 <header class="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
-	<div class="relative mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+	<div class="relative flex h-16 w-full items-center justify-between gap-4 px-4 sm:px-6">
 		<!-- Brand / Logo -->
 		<a
 			href={resolve('/')}
