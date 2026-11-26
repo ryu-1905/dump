@@ -1,0 +1,14 @@
+{
+  "project": "dump",
+  "os": "windows",
+  "technologies": {
+    "postgresql": {
+      "version": "19.0",
+      "details": "PostgreSQL 19.0 on x86_64-windows, compiled by msvc-19.44.35230, 64-bit"
+    },
+    "git": {
+      "version": "2.55.0.windows.3"
+    }
+  },
+  "updated_at": "2026-11-26T21:58:00+09:00"
+}
