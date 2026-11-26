@@ -62,20 +62,22 @@
 			</a>
 		</nav>
 
-		<!-- Right Actions: VN Translation Toggle -->
-		<button
-			type="button"
-			onclick={toggleVi}
-			aria-pressed={headerState.showVi}
-			title="Bật/tắt dịch tiếng Việt bên cạnh tiếng Anh"
-			class={[
-				'rounded-lg border px-2.5 py-1 text-xs font-semibold tracking-wide transition-colors',
-				headerState.showVi
-					? 'border-accent/40 bg-accent/15 text-accent'
-					: 'border-border bg-bg text-text-muted hover:bg-surface-hover hover:text-text'
-			]}
-		>
-			VN
-		</button>
+		<!-- Right Actions: VN Translation Toggle (exam pages only) -->
+		{#if isExamRoute}
+			<button
+				type="button"
+				onclick={toggleVi}
+				aria-pressed={headerState.showVi}
+				title="Bật/tắt dịch tiếng Việt bên cạnh tiếng Anh"
+				class={[
+					'rounded-lg border px-2.5 py-1 text-xs font-semibold tracking-wide transition-colors',
+					headerState.showVi
+						? 'border-accent/40 bg-accent/15 text-accent'
+						: 'border-border bg-bg text-text-muted hover:bg-surface-hover hover:text-text'
+				]}
+			>
+				VN
+			</button>
+		{/if}
 	</div>
 </header>
