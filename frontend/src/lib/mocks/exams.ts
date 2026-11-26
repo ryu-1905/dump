@@ -484,7 +484,13 @@ function buildMockQuestions(exam: ExamSummary, topics: ExamTopic[]): ExamQuestio
 				: `Option ${correctOptionIds[0].toUpperCase()} is correct because it directly enforces the required rule for ${exam.code} question #${index}.`,
 			explanationVi: multipleChoice
 				? `Cả hai đáp án ${correctOptionIds.map((id) => id.toUpperCase()).join(' và ')} đều cần thiết cho câu #${index} của đề ${exam.code}.`
-				: `Đáp án ${correctOptionIds[0].toUpperCase()} đúng vì nó áp dụng trực tiếp quy tắc yêu cầu cho câu #${index} của đề ${exam.code}.`
+				: `Đáp án ${correctOptionIds[0].toUpperCase()} đúng vì nó áp dụng trực tiếp quy tắc yêu cầu cho câu #${index} của đề ${exam.code}.`,
+			keywords: isMb330First
+				? ['Location directives', 'Restrict by unit', 'Pallet', 'Put-away work']
+				: [exam.code, topicId.toUpperCase(), `Rule #${index}`],
+			keywordsVi: isMb330First
+				? ['Chỉ dẫn vị trí kho', 'Giới hạn theo đơn vị', 'Pallet', 'Cất hàng']
+				: [exam.code, `Chủ đề ${topicId.toUpperCase()}`, `Quy tắc #${index}`]
 		};
 	});
 }

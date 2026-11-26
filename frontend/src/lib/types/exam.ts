@@ -45,6 +45,8 @@ export interface ExamQuestion {
 	correctOptionIds: string[];
 	explanation: string;
 	explanationVi?: string;
+	keywords?: string[];
+	keywordsVi?: string[];
 }
 
 export interface ExamAnswerRecord {

@@ -275,6 +275,27 @@
 						{#if headerState.showVi && currentQuestion.explanationVi}
 							<p class="mt-1.5 text-accent/90">{currentQuestion.explanationVi}</p>
 						{/if}
+						{#if currentQuestion.keywords && currentQuestion.keywords.length > 0}
+							<div class="mt-3 border-t border-border/60 pt-2.5">
+								<p class="text-[11px] font-semibold tracking-wide text-text-muted uppercase">
+									Keywords
+								</p>
+								<div class="mt-1.5 flex flex-wrap gap-1.5">
+									{#each currentQuestion.keywords as keyword, idx (keyword)}
+										<span
+											class="rounded-md border border-border bg-bg px-2 py-0.5 text-xs font-medium text-text"
+										>
+											{keyword}
+											{#if headerState.showVi && currentQuestion.keywordsVi?.[idx]}
+												<span class="text-accent/90">
+													· {currentQuestion.keywordsVi[idx]}
+												</span>
+											{/if}
+										</span>
+									{/each}
+								</div>
+							</div>
+						{/if}
 					</div>
 				{/if}
 
