@@ -3,11 +3,12 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { getExamPractice, submitExamAnswer } from '#lib/api/exams';
-	import type { ExamAnswerRecord, ExamQuestion, ExamSummary } from '#lib/types/exam';
+	import type { ExamAnswerRecord, ExamDetail, ExamQuestion } from '#lib/types/exam';
 
 	let examId = $derived(page.params.id ?? '');
 
-	let exam = $state<ExamSummary | null>(null);
+	let mode = $state<'overview' | 'practice'>('overview');
+	let exam = $state<ExamDetail | null>(null);
 	let questions = $state<ExamQuestion[]>([]);
 	let answers = $state<Record<string, ExamAnswerRecord>>({});
 	let currentIndex = $state(1);
@@ -18,7 +19,12 @@
 
 	let currentQuestion = $derived(questions[currentIndex - 1] ?? null);
 	let currentAnswer = $derived(currentQuestion ? (answers[currentQuestion.id] ?? null) : null);
-	let answeredCount = $derived(Object.keys(answers).length);
+	let answeredCount = $derived(Math.max(exam?.answeredCount ?? 0, Object.keys(answers).length));
+	let resumeIndex = $derived(
+		exam?.lastQuestionIndex && exam.lastQuestionIndex <= questions.length
+			? exam.lastQuestionIndex
+			: 1
+	);
 
 	function syncSelectionForQuestion(index: number) {
 		const q = questions[index - 1];
@@ -28,6 +34,11 @@
 		}
 		const saved = answers[q.id];
 		selectedOptionIds = saved ? [...saved.selectedOptionIds] : [];
+	}
+
+	function startPractice(startAt = 1) {
+		goToQuestion(startAt);
+		mode = 'practice';
 	}
 
 	function goToQuestion(index: number) {
@@ -101,12 +112,22 @@
 <section class="space-y-6">
 	<!-- Top Navigation -->
 	<div class="flex flex-wrap items-center justify-between gap-3">
-		<a
-			href={resolve('/')}
-			class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
-		>
-			← Back to exams
-		</a>
+		{#if mode === 'practice'}
+			<button
+				type="button"
+				onclick={() => (mode = 'overview')}
+				class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
+			>
+				← Exam overview
+			</button>
+		{:else}
+			<a
+				href={resolve('/')}
+				class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
+			>
+				← Back to exams
+			</a>
+		{/if}
 
 		{#if exam}
 			<div class="flex items-center gap-3 text-xs text-text-muted">
@@ -130,8 +151,109 @@
 				Return Home
 			</a>
 		</div>
+	{:else if exam && mode === 'overview'}
+		<!-- Overview Screen -->
+		<div class="space-y-6">
+			<!-- Basic Info & Intro -->
+			<div class="rounded-xl border border-border bg-surface p-6">
+				<div class="flex flex-wrap items-center gap-2">
+					<span
+						class="rounded-md border border-border bg-bg px-2.5 py-0.5 font-mono text-xs font-semibold text-text"
+					>
+						{exam.code}
+					</span>
+					<span class="text-xs text-text-muted">{exam.vendor}</span>
+					<span class="text-xs text-text-muted">· Updated {exam.updatedAt}</span>
+				</div>
+
+				<h1 class="mt-3 text-xl font-bold tracking-tight text-text sm:text-2xl">
+					{exam.title}
+				</h1>
+				<p class="mt-2 text-sm leading-relaxed text-text-muted">
+					{exam.description}
+				</p>
+
+				<!-- Summary Stats -->
+				<div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+					<div class="rounded-lg border border-border bg-bg p-3.5">
+						<p class="text-xs text-text-muted">Total Questions</p>
+						<p class="mt-1 text-lg font-semibold text-text">{exam.totalQuestions}</p>
+					</div>
+					<div class="rounded-lg border border-border bg-bg p-3.5">
+						<p class="text-xs text-text-muted">Completed</p>
+						<p class="mt-1 text-lg font-semibold text-text">
+							{answeredCount} / {exam.totalQuestions}
+						</p>
+					</div>
+					<div class="col-span-2 rounded-lg border border-border bg-bg p-3.5 sm:col-span-1">
+						<p class="text-xs text-text-muted">Best Score</p>
+						<p class="mt-1 text-lg font-semibold text-text">
+							{exam.bestScorePercent !== null ? `${exam.bestScorePercent}%` : '—'}
+						</p>
+					</div>
+				</div>
+
+				<!-- Action Buttons -->
+				<div class="mt-6 flex flex-wrap items-center gap-3">
+					{#if resumeIndex > 1}
+						<button
+							type="button"
+							onclick={() => startPractice(resumeIndex)}
+							class="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+						>
+							Continue from #{resumeIndex}
+						</button>
+						<button
+							type="button"
+							onclick={() => startPractice(1)}
+							class="rounded-lg border border-border bg-bg px-4 py-2.5 text-sm font-medium text-text transition-colors hover:bg-surface-hover"
+						>
+							Start from #1
+						</button>
+					{:else}
+						<button
+							type="button"
+							onclick={() => startPractice(1)}
+							class="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+						>
+							Start Practice
+						</button>
+					{/if}
+				</div>
+			</div>
+
+			<!-- Topics Breakdown -->
+			<div class="rounded-xl border border-border bg-surface p-6">
+				<div class="flex items-center justify-between">
+					<h2 class="text-sm font-semibold text-text">Topics & Question Breakdown</h2>
+					<span class="text-xs text-text-muted">{exam.topics.length} topics</span>
+				</div>
+
+				<div class="mt-4 divide-y divide-border rounded-lg border border-border bg-bg">
+					{#each exam.topics as topic, i (topic.id)}
+						{@const share =
+							exam.totalQuestions > 0
+								? Math.round((topic.questionCount / exam.totalQuestions) * 100)
+								: 0}
+						<div class="flex items-center justify-between gap-4 px-4 py-3">
+							<div class="min-w-0">
+								<p class="truncate text-sm font-medium text-text">
+									{i + 1}. {topic.name}
+								</p>
+								<p class="mt-0.5 text-xs text-text-muted">{share}% of exam</p>
+							</div>
+							<span
+								class="shrink-0 rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text"
+							>
+								{topic.questionCount} questions
+							</span>
+						</div>
+					{/each}
+				</div>
+			</div>
+		</div>
 	{:else if exam && currentQuestion}
-		<!-- Exam Title Banner -->
+		<!-- Practice Screen -->
 		<div class="rounded-xl border border-border bg-surface p-5">
 			<div class="flex flex-wrap items-center gap-2">
 				<span

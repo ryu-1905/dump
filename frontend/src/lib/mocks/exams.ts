@@ -1,10 +1,12 @@
 import {
 	getExamStatus,
 	type ExamAnswerRecord,
+	type ExamDetail,
 	type ExamListParams,
 	type ExamPracticePayload,
 	type ExamQuestion,
 	type ExamSummary,
+	type ExamTopic,
 	type PaginatedExamsResponse,
 	type SubmitAnswerRequest
 } from '#lib/types/exam';
@@ -496,6 +498,29 @@ export function mockListExams(params: ExamListParams = {}): Promise<PaginatedExa
 	});
 }
 
+function buildMockTopics(exam: ExamSummary): ExamTopic[] {
+	if (exam.id === 'mb-330') {
+		return [
+			{ id: 'pim', name: 'Implement Product Information Management', questionCount: 30 },
+			{ id: 'inv', name: 'Implement Inventory Management', questionCount: 35 },
+			{ id: 'scp', name: 'Implement Supply Chain Processes', questionCount: 30 },
+			{ id: 'wms', name: 'Implement Warehouse & Transportation Management', questionCount: 25 }
+		];
+	}
+
+	const q1 = Math.round(exam.totalQuestions * 0.3);
+	const q2 = Math.round(exam.totalQuestions * 0.25);
+	const q3 = Math.round(exam.totalQuestions * 0.25);
+	const q4 = Math.max(1, exam.totalQuestions - (q1 + q2 + q3));
+
+	return [
+		{ id: 'core', name: 'Core Architecture & Configuration', questionCount: q1 },
+		{ id: 'ops', name: 'Operations, Monitoring & Maintenance', questionCount: q2 },
+		{ id: 'sec', name: 'Security, Identity & Compliance', questionCount: q3 },
+		{ id: 'adv', name: 'Troubleshooting & Best Practices', questionCount: q4 }
+	];
+}
+
 export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload> {
 	const baseExam = MOCK_EXAMS.find((item) => item.id === examId);
 	if (!baseExam) {
@@ -504,8 +529,16 @@ export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload
 
 	const store = readProgressStore();
 	const entry = store[examId];
-	const exam = mergeExamWithProgress(baseExam, entry);
-	const questions = buildMockQuestions(exam);
+	const summary = mergeExamWithProgress(baseExam, entry);
+	const exam: ExamDetail = {
+		...summary,
+		description:
+			examId === 'mb-330'
+				? 'Practice questions covering product information, inventory control, procurement, sales, and warehouse management in Dynamics 365 Supply Chain Management.'
+				: `Comprehensive practice set for ${summary.code} (${summary.title}) organized by exam domains.`,
+		topics: buildMockTopics(summary)
+	};
+	const questions = buildMockQuestions(summary);
 
 	return Promise.resolve({
 		exam,

@@ -49,8 +49,19 @@ export interface ExamAnswerRecord {
 	isCorrect: boolean;
 }
 
+export interface ExamTopic {
+	id: string;
+	name: string;
+	questionCount: number;
+}
+
+export interface ExamDetail extends ExamSummary {
+	description: string;
+	topics: ExamTopic[];
+}
+
 export interface ExamPracticePayload {
-	exam: ExamSummary;
+	exam: ExamDetail;
 	questions: ExamQuestion[];
 	answers: Record<string, ExamAnswerRecord>;
 }
