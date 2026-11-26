@@ -8,12 +8,10 @@
 	};
 
 	const navItems: NavItem[] = [{ label: 'Home', href: '/' }];
-
-	let mobileOpen = $state(false);
 </script>
 
 <header class="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
-	<div class="relative flex h-16 w-full items-center justify-between gap-4 px-4 sm:px-6">
+	<div class="relative flex h-16 w-full items-center px-4 sm:px-6">
 		<!-- Brand / Logo -->
 		<a
 			href={resolve('/')}
@@ -27,10 +25,10 @@
 			</span>
 		</a>
 
-		<!-- Desktop Navigation -->
+		<!-- Centered Navigation -->
 		<nav
 			aria-label="Main navigation"
-			class="hidden items-center gap-1 md:absolute md:left-1/2 md:flex md:-translate-x-1/2"
+			class="absolute left-1/2 flex -translate-x-1/2 items-center gap-1"
 		>
 			{#each navItems as item (item.href)}
 				{@const active = page.url.pathname === item.href}
@@ -48,65 +46,5 @@
 				</a>
 			{/each}
 		</nav>
-
-		<!-- Right Actions & Mobile Toggle -->
-		<div class="flex items-center gap-3 md:hidden">
-			<button
-				type="button"
-				class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-bg text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
-				aria-label="Toggle navigation menu"
-				aria-expanded={mobileOpen}
-				onclick={() => (mobileOpen = !mobileOpen)}
-			>
-				{#if mobileOpen}
-					<svg
-						class="h-5 w-5"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				{:else}
-					<svg
-						class="h-5 w-5"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-					</svg>
-				{/if}
-			</button>
-		</div>
 	</div>
-
-	<!-- Mobile Navigation -->
-	{#if mobileOpen}
-		<nav
-			aria-label="Mobile navigation"
-			class="border-t border-border bg-surface px-4 py-3 md:hidden"
-		>
-			<div class="flex flex-col gap-1">
-				{#each navItems as item (item.href)}
-					{@const active = page.url.pathname === item.href}
-					<a
-						href={resolve(item.href)}
-						onclick={() => (mobileOpen = false)}
-						class={[
-							'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-							active
-								? 'bg-surface-hover text-text'
-								: 'text-text-muted hover:bg-surface-hover/60 hover:text-text'
-						]}
-						aria-current={active ? 'page' : undefined}
-					>
-						{item.label}
-					</a>
-				{/each}
-			</div>
-		</nav>
-	{/if}
 </header>
