@@ -13,13 +13,13 @@ Use this pattern whenever the frontend needs to fetch or mutate data before the 
 - `frontend/src/lib/types/<resource>.ts` — Shared TypeScript interfaces matching the expected Rust JSON payloads.
 - `frontend/src/lib/mocks/<resource>.ts` — Realistic mock fixtures and in-memory handlers.
 - `frontend/src/lib/api/client.ts` — Shared `request<T>()` wrapper handling base URL (`PUBLIC_API_BASE_URL`), JSON parsing, and error normalization.
-- `frontend/src/lib/api/<resource>.ts` — Resource-specific functions (e.g., `listItems()`, `createItem()`), which switch between mock handlers and `request<T>()` based on `PUBLIC_USE_MOCK_API`.
+- `frontend/src/lib/api/<resource>.ts` — Resource-specific functions (e.g., `listItems()`, `createItem()`), which switch between mock handlers and `request<T>()` based on `PUBLIC_TEST_FLAG`.
 
 ## Rules
 1. **Never call `fetch()` directly in `.svelte` components.** Always import functions from `#lib/api/<resource>`.
 2. **Keep types identical** between mock responses and the planned Rust API contract so components need zero refactoring when switching.
 3. **Simulate async boundaries:** Mock functions must be `async` (returning `Promise<T>`) and return shallow/deep copies rather than mutating shared module state directly when returning data.
-4. **Centralized toggle:** Use `PUBLIC_USE_MOCK_API` (default `'true'` during frontend-first development) and `PUBLIC_API_BASE_URL` so flipping to the Rust backend only requires updating env vars.
+4. **Centralized toggle:** Use `PUBLIC_TEST_FLAG` in `.env` (`yes` = return mock data, anything else = call real Rust API at `PUBLIC_API_BASE_URL`).
 5. **Env hygiene:** Whenever adding `PUBLIC_*` variables to `.env`, also add placeholder entries to `.env.example`.
 
 ## Minimal Example
@@ -28,7 +28,7 @@ Use this pattern whenever the frontend needs to fetch or mutate data before the 
 // frontend/src/lib/api/client.ts
 import { env } from '$env/dynamic/public';
 
-export const USE_MOCK_API = env.PUBLIC_USE_MOCK_API !== 'false';
+export const USE_MOCK_API = env.PUBLIC_TEST_FLAG?.toLowerCase() === 'yes';
 const BASE_URL = env.PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
