@@ -602,6 +602,53 @@ function buildSeededAnswers(
 	return seeded;
 }
 
+export function mockGetExamOverview(examId: string): Promise<ExamDetail> {
+	const baseExam = MOCK_EXAMS.find((item) => item.id === examId);
+	if (!baseExam) {
+		return Promise.reject(new Error(`Exam "${examId}" not found`));
+	}
+
+	const store = readProgressStore();
+	const entry = store[examId];
+	const summary = mergeExamWithProgress(baseExam, entry);
+	const rawTopics = buildMockTopics(summary);
+	const questions = buildMockQuestions(summary, rawTopics);
+	const answers = entry?.answers ?? buildSeededAnswers(baseExam, questions);
+
+	const lastIndex = summary.lastQuestionIndex;
+	const continueQuestion =
+		lastIndex && lastIndex >= 1 && lastIndex <= questions.length ? questions[lastIndex - 1] : null;
+
+	const topics: ExamTopic[] = rawTopics.map((topic) => {
+		const topicQuestions = questions.filter((q) => q.topicId === topic.id);
+		const answeredCount = topicQuestions.filter((q) => Boolean(answers[q.id])).length;
+		let continueQuestionIndex: number | null = null;
+		if (continueQuestion && continueQuestion.topicId === topic.id) {
+			const pos = topicQuestions.findIndex((q) => q.id === continueQuestion.id);
+			if (pos >= 0) continueQuestionIndex = pos + 1;
+		}
+		return {
+			...topic,
+			answeredCount,
+			continueQuestionIndex
+		};
+	});
+
+	return Promise.resolve({
+		...summary,
+		answeredCount: Object.keys(answers).length,
+		description:
+			examId === 'mb-330'
+				? 'Practice questions covering product information, inventory control, procurement, sales, and warehouse management in Dynamics 365 Supply Chain Management.'
+				: `Comprehensive practice set for ${summary.code} (${summary.title}) organized by exam domains.`,
+		descriptionVi:
+			examId === 'mb-330'
+				? 'Bộ câu hỏi luyện tập về quản lý thông tin sản phẩm, kiểm soát tồn kho, mua hàng, bán hàng và quản lý kho trong Dynamics 365 Supply Chain Management.'
+				: `Bộ câu hỏi luyện tập tổng hợp cho ${summary.code} (${summary.title}), phân chia theo các nhóm chủ đề của kỳ thi.`,
+		topics
+	});
+}
+
 export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload> {
 	const baseExam = MOCK_EXAMS.find((item) => item.id === examId);
 	if (!baseExam) {

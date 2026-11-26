@@ -2,38 +2,21 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { getExamPractice } from '#lib/api/exams';
+	import { getExamOverview } from '#lib/api/exams';
 	import { headerState } from '#lib/state/header.svelte';
-	import type { ExamAnswerRecord, ExamDetail, ExamQuestion } from '#lib/types/exam';
+	import type { ExamDetail, ExamTopic } from '#lib/types/exam';
 
 	let examId = $derived(page.params.id ?? '');
 
 	let exam = $state<ExamDetail | null>(null);
-	let questions = $state<ExamQuestion[]>([]);
-	let answers = $state<Record<string, ExamAnswerRecord>>({});
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
-	let answeredCount = $derived(Object.keys(answers).length);
-	let lastQuestionIndex = $derived(exam?.lastQuestionIndex ?? null);
 	let resumeIndex = $derived(
-		lastQuestionIndex && lastQuestionIndex <= questions.length ? lastQuestionIndex : 1
+		exam?.lastQuestionIndex && exam.lastQuestionIndex <= exam.totalQuestions
+			? exam.lastQuestionIndex
+			: 1
 	);
-	let continueTopicId = $derived(
-		lastQuestionIndex && lastQuestionIndex <= questions.length
-			? (questions[lastQuestionIndex - 1]?.topicId ?? null)
-			: null
-	);
-
-	function getTopicAnsweredCount(topicId: string): number {
-		let count = 0;
-		for (const q of questions) {
-			if (q.topicId === topicId && answers[q.id]) {
-				count++;
-			}
-		}
-		return count;
-	}
 
 	function getPracticeQuery(options: { topicId?: string; q?: number } = {}): string {
 		const parts: string[] = [];
@@ -42,25 +25,20 @@
 		return parts.length > 0 ? `?${parts.join('&')}` : '';
 	}
 
-	function getTopicPracticeQuery(topicId: string): string {
-		if (topicId === continueTopicId && lastQuestionIndex) {
-			const list = questions.filter((q) => q.topicId === topicId);
-			const targetQuestion = questions[lastQuestionIndex - 1];
-			const pos = targetQuestion ? list.findIndex((q) => q.id === targetQuestion.id) : -1;
-			return getPracticeQuery({ topicId, q: pos >= 0 ? pos + 1 : 1 });
+	function getTopicPracticeQuery(topic: ExamTopic): string {
+		if (topic.continueQuestionIndex) {
+			return getPracticeQuery({ topicId: topic.id, q: topic.continueQuestionIndex });
 		}
-		return getPracticeQuery({ topicId, q: 1 });
+		return getPracticeQuery({ topicId: topic.id, q: 1 });
 	}
 
 	async function loadOverview(id: string) {
 		loading = true;
 		error = null;
 		try {
-			const payload = await getExamPractice(id);
-			exam = payload.exam;
-			headerState.examCode = payload.exam.code;
-			questions = payload.questions;
-			answers = payload.answers;
+			const detail = await getExamOverview(id);
+			exam = detail;
+			headerState.examCode = detail.code;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load exam';
 		} finally {
@@ -91,7 +69,7 @@
 		{#if exam}
 			<div class="flex items-center gap-3 text-xs text-text-muted">
 				<span>
-					Answered: <strong class="font-medium text-text">{answeredCount}</strong> / {questions.length}
+					Answered: <strong class="font-medium text-text">{exam.answeredCount}</strong> / {exam.totalQuestions}
 				</span>
 			</div>
 		{/if}
@@ -145,7 +123,7 @@
 					<div class="rounded-lg border border-border bg-bg p-3.5">
 						<p class="text-xs text-text-muted">Completed</p>
 						<p class="mt-1 text-lg font-semibold text-text">
-							{answeredCount} / {exam.totalQuestions}
+							{exam.answeredCount} / {exam.totalQuestions}
 						</p>
 					</div>
 					<div class="col-span-2 rounded-lg border border-border bg-bg p-3.5 sm:col-span-1">
@@ -197,7 +175,8 @@
 							exam.totalQuestions > 0
 								? Math.round((topic.questionCount / exam.totalQuestions) * 100)
 								: 0}
-						{@const topicAnswered = getTopicAnsweredCount(topic.id)}
+						{@const topicAnswered = topic.answeredCount ?? 0}
+						{@const isContinueTopic = Boolean(topic.continueQuestionIndex)}
 						<div
 							class="flex flex-col justify-between gap-3 px-4 py-3.5 sm:flex-row sm:items-center"
 						>
@@ -221,15 +200,15 @@
 								</span>
 								<!-- eslint-disable svelte/no-navigation-without-resolve -->
 								<a
-									href={`${resolve('/exams/[id]/practice', { id: examId })}${getTopicPracticeQuery(topic.id)}`}
+									href={`${resolve('/exams/[id]/practice', { id: examId })}${getTopicPracticeQuery(topic)}`}
 									class={[
 										'rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors',
-										topic.id === continueTopicId
+										isContinueTopic
 											? 'bg-accent text-white hover:bg-accent-hover'
 											: 'border border-border bg-surface text-text hover:bg-surface-hover'
 									]}
 								>
-									{topic.id === continueTopicId ? 'Continue' : 'Start'}
+									{isContinueTopic ? 'Continue' : 'Start'}
 								</a>
 								<!-- eslint-enable svelte/no-navigation-without-resolve -->
 							</div>

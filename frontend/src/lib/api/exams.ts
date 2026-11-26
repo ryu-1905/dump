@@ -1,14 +1,14 @@
 import { apiRequest, USE_MOCK_API } from '#lib/api/client';
 import {
-	mockGetExamPractice,
+	mockGetExamOverview,
 	mockGetExamQuestion,
 	mockListExams,
 	mockSubmitAnswer
 } from '#lib/mocks/exams';
 import type {
 	ExamAnswerRecord,
+	ExamDetail,
 	ExamListParams,
-	ExamPracticePayload,
 	ExamQuestionPayload,
 	PaginatedExamsResponse,
 	SubmitAnswerRequest
@@ -33,13 +33,13 @@ export async function listExams(params: ExamListParams = {}): Promise<PaginatedE
 	return apiRequest<PaginatedExamsResponse>(query ? `/api/exams?${query}` : '/api/exams');
 }
 
-export async function getExamPractice(examId: string): Promise<ExamPracticePayload> {
+export async function getExamOverview(examId: string): Promise<ExamDetail> {
 	getClientId();
 
 	if (USE_MOCK_API) {
-		return mockGetExamPractice(examId);
+		return mockGetExamOverview(examId);
 	}
-	return apiRequest<ExamPracticePayload>(`/api/exams/${encodeURIComponent(examId)}/practice`);
+	return apiRequest<ExamDetail>(`/api/exams/${encodeURIComponent(examId)}`);
 }
 
 export async function getExamQuestion(

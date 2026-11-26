@@ -58,6 +58,8 @@ export interface ExamTopic {
 	name: string;
 	nameVi?: string;
 	questionCount: number;
+	answeredCount?: number;
+	continueQuestionIndex?: number | null;
 }
 
 export interface ExamDetail extends ExamSummary {
