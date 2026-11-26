@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { getExamPractice, submitExamAnswer } from '#lib/api/exams';
+	import { headerState } from '#lib/state/header.svelte';
 	import type { ExamAnswerRecord, ExamDetail, ExamQuestion } from '#lib/types/exam';
 
 	let examId = $derived(page.params.id ?? '');
@@ -87,6 +88,7 @@
 		try {
 			const payload = await getExamPractice(id);
 			exam = payload.exam;
+			headerState.examCode = payload.exam.code;
 			questions = payload.questions;
 			answers = payload.answers;
 			const startIndex =
@@ -106,6 +108,9 @@
 		if (examId) {
 			void loadPractice(examId);
 		}
+		return () => {
+			headerState.examCode = null;
+		};
 	});
 </script>
 
