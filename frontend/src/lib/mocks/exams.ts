@@ -9,6 +9,7 @@ import {
 	type ExamSummary,
 	type ExamTopic,
 	type PaginatedExamsResponse,
+	type QuestionNavItem,
 	type QuestionNavStatus,
 	type SubmitAnswerRequest
 } from '#lib/types/exam';
@@ -622,14 +623,13 @@ export function mockGetExamOverview(examId: string): Promise<ExamDetail> {
 	const topics: ExamTopic[] = rawTopics.map((topic) => {
 		const topicQuestions = questions.filter((q) => q.topicId === topic.id);
 		const answeredCount = topicQuestions.filter((q) => Boolean(answers[q.id])).length;
-		let continueQuestionIndex: number | null = null;
-		if (continueQuestion && continueQuestion.topicId === topic.id) {
-			const pos = topicQuestions.findIndex((q) => q.id === continueQuestion.id);
-			if (pos >= 0) continueQuestionIndex = pos + 1;
-		}
+		const startQuestionIndex = topicQuestions[0]?.index ?? 1;
+		const continueQuestionIndex =
+			continueQuestion && continueQuestion.topicId === topic.id ? continueQuestion.index : null;
 		return {
 			...topic,
 			answeredCount,
+			startQuestionIndex,
 			continueQuestionIndex
 		};
 	});
@@ -705,24 +705,17 @@ export function mockGetExamQuestion(
 		return Promise.reject(new Error(`No questions found for topic "${options.topicId}"`));
 	}
 
-	let currentIndex = 1;
-	if (
-		options.q &&
-		Number.isInteger(options.q) &&
-		options.q >= 1 &&
-		options.q <= scopedQuestions.length
-	) {
-		currentIndex = options.q;
-	} else if (
-		!options.topicId &&
-		summary.lastQuestionIndex &&
-		summary.lastQuestionIndex >= 1 &&
-		summary.lastQuestionIndex <= scopedQuestions.length
-	) {
-		currentIndex = summary.lastQuestionIndex;
+	let scopePos = 0;
+	if (options.q && Number.isInteger(options.q)) {
+		const found = scopedQuestions.findIndex((item) => item.index === options.q);
+		if (found >= 0) scopePos = found;
+	} else if (!options.topicId && summary.lastQuestionIndex) {
+		const found = scopedQuestions.findIndex((item) => item.index === summary.lastQuestionIndex);
+		if (found >= 0) scopePos = found;
 	}
 
-	const question = scopedQuestions[currentIndex - 1];
+	const question = scopedQuestions[scopePos];
+	const currentIndex = question.index;
 
 	// Record the active question as lastQuestionIndex.
 	store[examId] = {
@@ -745,10 +738,10 @@ export function mockGetExamQuestion(
 		topics
 	};
 
-	const statuses: QuestionNavStatus[] = scopedQuestions.map((item) => {
+	const navItems: QuestionNavItem[] = scopedQuestions.map((item) => {
 		const rec = answers[item.id];
-		if (!rec) return 'unanswered';
-		return rec.isCorrect ? 'correct' : 'incorrect';
+		const status: QuestionNavStatus = !rec ? 'unanswered' : rec.isCorrect ? 'correct' : 'incorrect';
+		return { index: item.index, status };
 	});
 
 	return Promise.resolve({
@@ -757,7 +750,7 @@ export function mockGetExamQuestion(
 		currentIndex,
 		question,
 		answer: answers[question.id] ?? null,
-		statuses,
+		navItems,
 		answeredCount: Object.keys(answers).length
 	});
 }

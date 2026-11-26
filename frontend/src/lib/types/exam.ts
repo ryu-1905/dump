@@ -59,6 +59,7 @@ export interface ExamTopic {
 	nameVi?: string;
 	questionCount: number;
 	answeredCount?: number;
+	startQuestionIndex?: number;
 	continueQuestionIndex?: number | null;
 }
 
@@ -70,13 +71,18 @@ export interface ExamDetail extends ExamSummary {
 
 export type QuestionNavStatus = 'unanswered' | 'correct' | 'incorrect';
 
+export interface QuestionNavItem {
+	index: number;
+	status: QuestionNavStatus;
+}
+
 export interface ExamQuestionPayload {
 	exam: ExamDetail;
 	totalInScope: number;
 	currentIndex: number;
 	question: ExamQuestion;
 	answer: ExamAnswerRecord | null;
-	statuses: QuestionNavStatus[];
+	navItems: QuestionNavItem[];
 	answeredCount: number;
 }
 

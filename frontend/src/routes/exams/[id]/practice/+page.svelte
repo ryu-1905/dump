@@ -9,7 +9,7 @@
 		ExamAnswerRecord,
 		ExamDetail,
 		ExamQuestion,
-		QuestionNavStatus
+		QuestionNavItem
 	} from '#lib/types/exam';
 
 	let examId = $derived(page.params.id ?? '');
@@ -26,7 +26,7 @@
 	let currentAnswer = $state<ExamAnswerRecord | null>(null);
 	let currentIndex = $state(1);
 	let totalInScope = $state(0);
-	let statuses = $state<QuestionNavStatus[]>([]);
+	let navItems = $state<QuestionNavItem[]>([]);
 	let answeredCount = $state(0);
 	let selectedOptionIds = $state<string[]>([]);
 	let loading = $state(true);
@@ -35,6 +35,11 @@
 
 	let activeTopic = $derived(
 		topicIdParam ? (exam?.topics.find((t) => t.id === topicIdParam) ?? null) : null
+	);
+	let currentPos = $derived(navItems.findIndex((item) => item.index === currentIndex));
+	let prevQuestionIndex = $derived(currentPos > 0 ? navItems[currentPos - 1].index : null);
+	let nextQuestionIndex = $derived(
+		currentPos >= 0 && currentPos < navItems.length - 1 ? navItems[currentPos + 1].index : null
 	);
 
 	let requestToken = 0;
@@ -54,7 +59,7 @@
 			currentAnswer = payload.answer;
 			currentIndex = payload.currentIndex;
 			totalInScope = payload.totalInScope;
-			statuses = payload.statuses;
+			navItems = payload.navItems;
 			answeredCount = payload.answeredCount;
 			selectedOptionIds = payload.answer ? [...payload.answer.selectedOptionIds] : [];
 		} catch (err) {
@@ -67,8 +72,8 @@
 		}
 	}
 
-	async function goToQuestion(nextIndex: number) {
-		if (nextIndex < 1 || nextIndex > totalInScope || nextIndex === currentIndex) return;
+	async function goToQuestion(nextIndex: number | null) {
+		if (!nextIndex || nextIndex === currentIndex) return;
 		const base = resolve('/exams/[id]/practice', { id: examId });
 		const parts: string[] = [];
 		if (topicIdParam) parts.push(`topic=${encodeURIComponent(topicIdParam)}`);
@@ -105,9 +110,14 @@
 			if (wasUnanswered) {
 				answeredCount += 1;
 			}
-			const nextStatuses = [...statuses];
-			nextStatuses[currentIndex - 1] = record.isCorrect ? 'correct' : 'incorrect';
-			statuses = nextStatuses;
+			if (currentPos >= 0) {
+				const nextItems = [...navItems];
+				nextItems[currentPos] = {
+					...nextItems[currentPos],
+					status: record.isCorrect ? 'correct' : 'incorrect'
+				};
+				navItems = nextItems;
+			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to submit answer';
 		} finally {
@@ -184,7 +194,7 @@
 			<div class="space-y-5 rounded-xl border border-border bg-surface p-6">
 				<div class="flex items-center justify-between border-b border-border pb-3">
 					<span class="text-xs font-semibold tracking-wide text-accent uppercase">
-						Question {currentIndex} of {totalInScope}
+						Question #{currentQuestion.index} ({currentPos + 1} of {totalInScope})
 					</span>
 					<span class="text-xs text-text-muted">
 						{currentQuestion.multipleChoice ? 'Select all that apply' : 'Single choice'}
@@ -272,8 +282,8 @@
 				<div class="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
 					<button
 						type="button"
-						disabled={currentIndex <= 1}
-						onclick={() => void goToQuestion(currentIndex - 1)}
+						disabled={prevQuestionIndex === null}
+						onclick={() => void goToQuestion(prevQuestionIndex)}
 						class="rounded-lg border border-border bg-bg px-3.5 py-2 text-xs font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
 					>
 						Previous
@@ -281,8 +291,8 @@
 
 					<button
 						type="button"
-						disabled={currentIndex >= totalInScope}
-						onclick={() => void goToQuestion(currentIndex + 1)}
+						disabled={nextQuestionIndex === null}
+						onclick={() => void goToQuestion(nextQuestionIndex)}
 						class="rounded-lg border border-border bg-bg px-3.5 py-2 text-xs font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
 					>
 						Next
@@ -296,24 +306,23 @@
 					Questions ({totalInScope})
 				</h2>
 				<div class="mt-3 grid max-h-96 grid-cols-5 gap-1.5 overflow-y-auto pr-1">
-					{#each statuses as status, idx (idx)}
-						{@const navIndex = idx + 1}
-						{@const isCurrent = navIndex === currentIndex}
+					{#each navItems as item (item.index)}
+						{@const isCurrent = item.index === currentIndex}
 						<button
 							type="button"
-							onclick={() => void goToQuestion(navIndex)}
+							onclick={() => void goToQuestion(item.index)}
 							class={[
 								'flex h-8 items-center justify-center rounded-md border text-xs font-medium transition-colors',
 								isCurrent
 									? 'border-accent bg-accent text-white'
-									: status === 'correct'
+									: item.status === 'correct'
 										? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
-										: status === 'incorrect'
+										: item.status === 'incorrect'
 											? 'border-red-500/40 bg-red-500/15 text-red-300'
 											: 'border-border bg-bg text-text-muted hover:bg-surface-hover hover:text-text'
 							]}
 						>
-							{navIndex}
+							{item.index}
 						</button>
 					{/each}
 				</div>

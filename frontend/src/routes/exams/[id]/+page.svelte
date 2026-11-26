@@ -26,10 +26,8 @@
 	}
 
 	function getTopicPracticeQuery(topic: ExamTopic): string {
-		if (topic.continueQuestionIndex) {
-			return getPracticeQuery({ topicId: topic.id, q: topic.continueQuestionIndex });
-		}
-		return getPracticeQuery({ topicId: topic.id, q: 1 });
+		const targetQ = topic.continueQuestionIndex ?? topic.startQuestionIndex ?? 1;
+		return getPracticeQuery({ topicId: topic.id, q: targetQ });
 	}
 
 	async function loadOverview(id: string) {
