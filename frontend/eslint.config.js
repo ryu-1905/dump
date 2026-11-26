@@ -17,7 +17,10 @@ export default defineConfig(
 	svelte.configs.prettier,
 	{
 		languageOptions: {
-			parserOptions: { projectService: true },
+			parserOptions: {
+				projectService: true,
+				tsconfigRootDir: import.meta.dirname
+			},
 			globals: { ...globals.browser, ...globals.node }
 		},
 		rules: {
@@ -31,6 +34,7 @@ export default defineConfig(
 		languageOptions: {
 			parserOptions: {
 				projectService: true,
+				tsconfigRootDir: import.meta.dirname,
 				extraFileExtensions: ['.svelte'],
 				parser: ts.parser
 			}
