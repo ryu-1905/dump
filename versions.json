@@ -1,4 +1,9 @@
 {
   "postgresql": "19.0",
-  "git": "2.55.0.windows.3"
+  "git": "2.55.0.windows.3",
+  "node": "26.7.0",
+  "npm": "11.19.0",
+  "svelte": "^5.57.3",
+  "sveltekit": "^3.2.0",
+  "tailwindcss": "^4.3.5"
 }
