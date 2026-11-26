@@ -26,10 +26,10 @@ Use this pattern whenever the frontend needs to fetch or mutate data before the 
 
 ```ts
 // frontend/src/lib/api/client.ts
-import { env } from '$env/dynamic/public';
+import { PUBLIC_API_BASE_URL, PUBLIC_TEST_FLAG } from '$app/env/public';
 
-export const USE_MOCK_API = env.PUBLIC_TEST_FLAG?.toLowerCase() === 'yes';
-const BASE_URL = env.PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+export const USE_MOCK_API = PUBLIC_TEST_FLAG?.toLowerCase() === 'yes';
+const BASE_URL = PUBLIC_API_BASE_URL || 'http://localhost:8080';
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 	const res = await fetch(`${BASE_URL}${path}`, {
