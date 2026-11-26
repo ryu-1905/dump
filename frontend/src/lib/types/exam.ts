@@ -27,6 +27,40 @@ export interface PaginatedExamsResponse {
 	totalPages: number;
 }
 
+export interface QuestionOption {
+	id: string;
+	label: string;
+	text: string;
+}
+
+export interface ExamQuestion {
+	id: string;
+	index: number;
+	prompt: string;
+	multipleChoice: boolean;
+	options: QuestionOption[];
+	correctOptionIds: string[];
+	explanation: string;
+}
+
+export interface ExamAnswerRecord {
+	questionId: string;
+	selectedOptionIds: string[];
+	isCorrect: boolean;
+}
+
+export interface ExamPracticePayload {
+	exam: ExamSummary;
+	questions: ExamQuestion[];
+	answers: Record<string, ExamAnswerRecord>;
+}
+
+export interface SubmitAnswerRequest {
+	questionId: string;
+	questionIndex: number;
+	selectedOptionIds: string[];
+}
+
 export function getExamStatus(exam: ExamSummary): ExamProgressStatus {
 	if (exam.answeredCount <= 0) return 'not_started';
 	if (exam.answeredCount >= exam.totalQuestions) return 'completed';

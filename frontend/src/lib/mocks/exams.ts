@@ -1,8 +1,12 @@
 import {
 	getExamStatus,
+	type ExamAnswerRecord,
 	type ExamListParams,
+	type ExamPracticePayload,
+	type ExamQuestion,
 	type ExamSummary,
-	type PaginatedExamsResponse
+	type PaginatedExamsResponse,
+	type SubmitAnswerRequest
 } from '#lib/types/exam';
 
 const MOCK_EXAMS: ExamSummary[] = [
@@ -382,13 +386,92 @@ const MOCK_EXAMS: ExamSummary[] = [
 	}
 ];
 
+const MOCK_PROGRESS_KEY = 'dump_mock_progress_v1';
+
+interface MockProgressEntry {
+	lastQuestionIndex: number | null;
+	answers: Record<string, ExamAnswerRecord>;
+}
+
+function readProgressStore(): Record<string, MockProgressEntry> {
+	if (typeof window === 'undefined') return {};
+	try {
+		const raw = window.localStorage.getItem(MOCK_PROGRESS_KEY);
+		return raw ? (JSON.parse(raw) as Record<string, MockProgressEntry>) : {};
+	} catch {
+		return {};
+	}
+}
+
+function writeProgressStore(store: Record<string, MockProgressEntry>): void {
+	if (typeof window === 'undefined') return;
+	window.localStorage.setItem(MOCK_PROGRESS_KEY, JSON.stringify(store));
+}
+
+function mergeExamWithProgress(exam: ExamSummary, entry?: MockProgressEntry): ExamSummary {
+	if (!entry) return { ...exam };
+
+	const answerValues = Object.values(entry.answers);
+	const answeredCount = answerValues.length;
+	const correctCount = answerValues.filter((a) => a.isCorrect).length;
+	const bestScorePercent =
+		answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : exam.bestScorePercent;
+
+	return {
+		...exam,
+		answeredCount,
+		lastQuestionIndex: entry.lastQuestionIndex,
+		bestScorePercent
+	};
+}
+
+function buildMockQuestions(exam: ExamSummary): ExamQuestion[] {
+	const labels = ['A', 'B', 'C', 'D'] as const;
+
+	return Array.from({ length: exam.totalQuestions }, (_, idx) => {
+		const index = idx + 1;
+		const multipleChoice = index % 5 === 0;
+		const correctOptionIds = multipleChoice ? ['a', 'c'] : [labels[idx % 4].toLowerCase()];
+
+		return {
+			id: `${exam.id}-q-${index}`,
+			index,
+			prompt:
+				index === 1 && exam.id === 'mb-330'
+					? 'A company uses Dynamics 365 Supply Chain Management. You need to configure warehouse location directives so put-away work selects bulk locations only when pallet quantities are received. Which setup should you configure?'
+					: `[${exam.code}] Sample question #${index}: Which configuration best satisfies the operational requirement described for ${exam.title}?`,
+			multipleChoice,
+			options: labels.map((label) => ({
+				id: label.toLowerCase(),
+				label,
+				text:
+					index === 1 && exam.id === 'mb-330'
+						? {
+								A: 'Configure a location directive line with Restrict by unit set to Pallet.',
+								B: 'Enable Allow split on the work template.',
+								C: 'Assign a fixed picking location to the item.',
+								D: 'Set the warehouse inventory status to Blocked.'
+							}[label]
+						: `Option ${label} for ${exam.code} question #${index}`
+			})),
+			correctOptionIds,
+			explanation: multipleChoice
+				? `Options ${correctOptionIds.map((id) => id.toUpperCase()).join(' and ')} are both required for ${exam.code} question #${index}.`
+				: `Option ${correctOptionIds[0].toUpperCase()} is correct because it directly enforces the required rule for ${exam.code} question #${index}.`
+		};
+	});
+}
+
 export function mockListExams(params: ExamListParams = {}): Promise<PaginatedExamsResponse> {
 	const page = Math.max(1, params.page ?? 1);
 	const limit = Math.max(1, params.limit ?? 6);
 	const query = (params.q ?? '').trim().toLowerCase();
 	const status = params.status ?? 'all';
+	const store = readProgressStore();
 
-	const filtered = MOCK_EXAMS.filter((exam) => {
+	const merged = MOCK_EXAMS.map((exam) => mergeExamWithProgress(exam, store[exam.id]));
+
+	const filtered = merged.filter((exam) => {
 		if (status !== 'all' && getExamStatus(exam) !== status) return false;
 		if (!query) return true;
 		return (
@@ -402,7 +485,7 @@ export function mockListExams(params: ExamListParams = {}): Promise<PaginatedExa
 	const totalPages = Math.max(1, Math.ceil(total / limit));
 	const safePage = Math.min(page, totalPages);
 	const start = (safePage - 1) * limit;
-	const items = filtered.slice(start, start + limit).map((exam) => ({ ...exam }));
+	const items = filtered.slice(start, start + limit);
 
 	return Promise.resolve({
 		items,
@@ -411,4 +494,62 @@ export function mockListExams(params: ExamListParams = {}): Promise<PaginatedExa
 		limit,
 		totalPages
 	});
+}
+
+export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload> {
+	const baseExam = MOCK_EXAMS.find((item) => item.id === examId);
+	if (!baseExam) {
+		return Promise.reject(new Error(`Exam "${examId}" not found`));
+	}
+
+	const store = readProgressStore();
+	const entry = store[examId];
+	const exam = mergeExamWithProgress(baseExam, entry);
+	const questions = buildMockQuestions(exam);
+
+	return Promise.resolve({
+		exam,
+		questions,
+		answers: entry?.answers ?? {}
+	});
+}
+
+export function mockSubmitAnswer(
+	examId: string,
+	payload: SubmitAnswerRequest
+): Promise<ExamAnswerRecord> {
+	const baseExam = MOCK_EXAMS.find((item) => item.id === examId);
+	if (!baseExam) {
+		return Promise.reject(new Error(`Exam "${examId}" not found`));
+	}
+
+	const questions = buildMockQuestions(baseExam);
+	const question = questions.find((q) => q.id === payload.questionId);
+	if (!question) {
+		return Promise.reject(new Error(`Question "${payload.questionId}" not found`));
+	}
+
+	const expected = [...question.correctOptionIds].sort();
+	const actual = [...payload.selectedOptionIds].sort();
+	const isCorrect =
+		expected.length === actual.length && expected.every((val, i) => val === actual[i]);
+
+	const record: ExamAnswerRecord = {
+		questionId: payload.questionId,
+		selectedOptionIds: [...payload.selectedOptionIds],
+		isCorrect
+	};
+
+	const store = readProgressStore();
+	const current = store[examId] ?? { lastQuestionIndex: null, answers: {} };
+	store[examId] = {
+		lastQuestionIndex: payload.questionIndex,
+		answers: {
+			...current.answers,
+			[payload.questionId]: record
+		}
+	};
+	writeProgressStore(store);
+
+	return Promise.resolve(record);
 }

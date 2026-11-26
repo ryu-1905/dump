@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { getExamStatus, type ExamSummary } from '#lib/types/exam';
 
 	interface Props {
@@ -30,8 +31,9 @@
 	} as const;
 </script>
 
-<article
-	class="flex flex-col justify-between rounded-xl border border-border bg-surface p-5 transition-colors hover:border-accent/40 hover:bg-surface-hover/60"
+<a
+	href={resolve('/exams/[id]', { id: exam.id })}
+	class="flex h-full flex-col justify-between rounded-xl border border-border bg-surface p-5 transition-colors hover:border-accent/40 hover:bg-surface-hover/60 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
 >
 	<div>
 		<!-- Top row: Code + Vendor + Status -->
@@ -92,4 +94,4 @@
 			></div>
 		</div>
 	</div>
-</article>
+</a>
