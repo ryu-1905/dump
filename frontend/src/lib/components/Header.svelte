@@ -7,7 +7,7 @@
 		href: '/';
 	};
 
-	const navItems: NavItem[] = [{ label: 'Overview', href: '/' }];
+	const navItems: NavItem[] = [{ label: 'Home', href: '/' }];
 
 	let mobileOpen = $state(false);
 </script>
@@ -17,14 +17,14 @@
 		<!-- Brand / Logo -->
 		<a
 			href={resolve('/')}
-			class="flex items-center gap-2.5 text-base font-semibold tracking-tight text-text transition-opacity hover:opacity-90"
+			aria-label="Home"
+			class="flex items-center transition-opacity hover:opacity-90"
 		>
 			<span
 				class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15 text-sm font-bold text-accent ring-1 ring-accent/30"
 			>
 				D
 			</span>
-			<span>dumb</span>
 		</a>
 
 		<!-- Desktop Navigation -->
@@ -47,17 +47,10 @@
 		</nav>
 
 		<!-- Right Actions & Mobile Toggle -->
-		<div class="flex items-center gap-3">
-			<span
-				class="hidden items-center gap-1.5 rounded-full border border-border bg-bg px-2.5 py-1 text-xs text-text-muted sm:inline-flex"
-			>
-				<span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-				Dark UI
-			</span>
-
+		<div class="flex items-center gap-3 md:hidden">
 			<button
 				type="button"
-				class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-bg text-text-muted transition-colors hover:bg-surface-hover hover:text-text md:hidden"
+				class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-bg text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
 				aria-label="Toggle navigation menu"
 				aria-expanded={mobileOpen}
 				onclick={() => (mobileOpen = !mobileOpen)}
