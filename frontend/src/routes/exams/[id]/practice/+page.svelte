@@ -169,25 +169,15 @@
 			</a>
 		</div>
 	{:else if exam && currentQuestion}
-		<!-- Exam Banner -->
-		<div class="rounded-xl border border-border bg-surface p-5">
-			<div class="flex flex-wrap items-center gap-2">
+		{#if activeTopic}
+			<div>
 				<span
-					class="rounded-md border border-border bg-bg px-2.5 py-0.5 font-mono text-xs font-semibold text-text"
+					class="inline-flex rounded-full border border-accent/30 bg-accent/15 px-3 py-1 text-xs font-medium text-accent"
 				>
-					{exam.code}
+					{activeTopic.name}
 				</span>
-				<span class="text-xs text-text-muted">{exam.vendor}</span>
-				{#if activeTopic}
-					<span
-						class="rounded-full border border-accent/30 bg-accent/15 px-2.5 py-0.5 text-xs font-medium text-accent"
-					>
-						{activeTopic.name}
-					</span>
-				{/if}
 			</div>
-			<h1 class="mt-2 text-lg font-bold text-text sm:text-xl">{exam.title}</h1>
-		</div>
+		{/if}
 
 		<div class="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
 			<!-- Question Card -->

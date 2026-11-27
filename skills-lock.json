@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "skills": {
+    "rust-skills": {
+      "source": "leonardomso/rust-skills",
+      "commit": "0e94a9e517cb2539bfd30694f5d785f610c27374",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "b6f486972d704a07a85678ccf8f4a47b2a5a21d69e93eccc9caeb027dc8edadb"
+    },
+    "supabase-postgres-best-practices": {
+      "source": "supabase/agent-skills",
+      "commit": "c9be0e931b7930f7d02126d04774d904c381e7d7",
+      "sourceType": "github",
+      "skillPath": "skills/supabase-postgres-best-practices/SKILL.md",
+      "computedHash": "3eb972c2d7c818e544e35cc33ea8d7147d4d78ae08142ef40037b0fbac7a2505"
+    }
+  }
+}

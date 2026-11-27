@@ -113,7 +113,7 @@
 				{/if}
 
 				<!-- Summary Stats -->
-				<div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+				<div class="mt-5 grid grid-cols-2 gap-3">
 					<div class="rounded-lg border border-border bg-bg p-3.5">
 						<p class="text-xs text-text-muted">Total Questions</p>
 						<p class="mt-1 text-lg font-semibold text-text">{exam.totalQuestions}</p>
@@ -122,12 +122,6 @@
 						<p class="text-xs text-text-muted">Completed</p>
 						<p class="mt-1 text-lg font-semibold text-text">
 							{exam.answeredCount} / {exam.totalQuestions}
-						</p>
-					</div>
-					<div class="col-span-2 rounded-lg border border-border bg-bg p-3.5 sm:col-span-1">
-						<p class="text-xs text-text-muted">Best Score</p>
-						<p class="mt-1 text-lg font-semibold text-text">
-							{exam.bestScorePercent !== null ? `${exam.bestScorePercent}%` : '—'}
 						</p>
 					</div>
 				</div>

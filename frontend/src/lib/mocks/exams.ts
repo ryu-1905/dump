@@ -23,7 +23,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 120,
 		answeredCount: 42,
 		lastQuestionIndex: 43,
-		bestScorePercent: 78,
 		updatedAt: '2026-11-20'
 	},
 	{
@@ -34,7 +33,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 95,
 		answeredCount: 95,
 		lastQuestionIndex: null,
-		bestScorePercent: 89,
 		updatedAt: '2026-11-15'
 	},
 	{
@@ -45,7 +43,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 130,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-11-10'
 	},
 	{
@@ -56,7 +53,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 110,
 		answeredCount: 25,
 		lastQuestionIndex: 26,
-		bestScorePercent: 72,
 		updatedAt: '2026-11-08'
 	},
 	{
@@ -67,7 +63,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 105,
 		answeredCount: 105,
 		lastQuestionIndex: null,
-		bestScorePercent: 91,
 		updatedAt: '2026-11-05'
 	},
 	{
@@ -78,7 +73,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 100,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-11-03'
 	},
 	{
@@ -89,7 +83,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 85,
 		answeredCount: 18,
 		lastQuestionIndex: 19,
-		bestScorePercent: null,
 		updatedAt: '2026-11-01'
 	},
 	{
@@ -100,7 +93,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 90,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-10-28'
 	},
 	{
@@ -111,7 +103,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 115,
 		answeredCount: 115,
 		lastQuestionIndex: null,
-		bestScorePercent: 85,
 		updatedAt: '2026-10-25'
 	},
 	{
@@ -122,7 +113,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 140,
 		answeredCount: 60,
 		lastQuestionIndex: 61,
-		bestScorePercent: 76,
 		updatedAt: '2026-10-22'
 	},
 	{
@@ -133,7 +123,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 100,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-10-18'
 	},
 	{
@@ -144,7 +133,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 80,
 		answeredCount: 80,
 		lastQuestionIndex: null,
-		bestScorePercent: 94,
 		updatedAt: '2026-10-14'
 	},
 	{
@@ -155,7 +143,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 150,
 		answeredCount: 12,
 		lastQuestionIndex: 13,
-		bestScorePercent: null,
 		updatedAt: '2026-10-10'
 	},
 	{
@@ -166,7 +153,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 75,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-10-05'
 	},
 	{
@@ -177,7 +163,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 80,
 		answeredCount: 24,
 		lastQuestionIndex: 25,
-		bestScorePercent: null,
 		updatedAt: '2026-10-04'
 	},
 	{
@@ -188,7 +173,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 70,
 		answeredCount: 70,
 		lastQuestionIndex: null,
-		bestScorePercent: 86,
 		updatedAt: '2026-10-02'
 	},
 	{
@@ -199,7 +183,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 110,
 		answeredCount: 55,
 		lastQuestionIndex: 56,
-		bestScorePercent: 74,
 		updatedAt: '2026-09-29'
 	},
 	{
@@ -210,7 +193,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 125,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-09-27'
 	},
 	{
@@ -221,7 +203,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 105,
 		answeredCount: 105,
 		lastQuestionIndex: null,
-		bestScorePercent: 88,
 		updatedAt: '2026-09-24'
 	},
 	{
@@ -232,7 +213,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 90,
 		answeredCount: 15,
 		lastQuestionIndex: 16,
-		bestScorePercent: null,
 		updatedAt: '2026-09-20'
 	},
 	{
@@ -243,7 +223,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 115,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-09-18'
 	},
 	{
@@ -254,7 +233,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 95,
 		answeredCount: 38,
 		lastQuestionIndex: 39,
-		bestScorePercent: 80,
 		updatedAt: '2026-09-15'
 	},
 	{
@@ -265,7 +243,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 120,
 		answeredCount: 120,
 		lastQuestionIndex: null,
-		bestScorePercent: 84,
 		updatedAt: '2026-09-12'
 	},
 	{
@@ -276,7 +253,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 135,
 		answeredCount: 30,
 		lastQuestionIndex: 31,
-		bestScorePercent: null,
 		updatedAt: '2026-09-10'
 	},
 	{
@@ -287,7 +263,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 100,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-09-07'
 	},
 	{
@@ -298,7 +273,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 95,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-09-04'
 	},
 	{
@@ -309,7 +283,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 110,
 		answeredCount: 64,
 		lastQuestionIndex: 65,
-		bestScorePercent: 79,
 		updatedAt: '2026-09-01'
 	},
 	{
@@ -320,7 +293,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 90,
 		answeredCount: 90,
 		lastQuestionIndex: null,
-		bestScorePercent: 92,
 		updatedAt: '2026-08-28'
 	},
 	{
@@ -331,7 +303,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 130,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-08-25'
 	},
 	{
@@ -342,7 +313,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 105,
 		answeredCount: 44,
 		lastQuestionIndex: 45,
-		bestScorePercent: 75,
 		updatedAt: '2026-08-22'
 	},
 	{
@@ -353,7 +323,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 160,
 		answeredCount: 52,
 		lastQuestionIndex: 53,
-		bestScorePercent: 71,
 		updatedAt: '2026-08-19'
 	},
 	{
@@ -364,7 +333,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 85,
 		answeredCount: 85,
 		lastQuestionIndex: null,
-		bestScorePercent: 95,
 		updatedAt: '2026-08-15'
 	},
 	{
@@ -375,7 +343,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 65,
 		answeredCount: 0,
 		lastQuestionIndex: null,
-		bestScorePercent: null,
 		updatedAt: '2026-08-12'
 	},
 	{
@@ -386,7 +353,6 @@ const MOCK_EXAMS: ExamSummary[] = [
 		totalQuestions: 95,
 		answeredCount: 19,
 		lastQuestionIndex: 20,
-		bestScorePercent: null,
 		updatedAt: '2026-08-08'
 	}
 ];
@@ -416,17 +382,12 @@ function writeProgressStore(store: Record<string, MockProgressEntry>): void {
 function mergeExamWithProgress(exam: ExamSummary, entry?: MockProgressEntry): ExamSummary {
 	if (!entry) return { ...exam };
 
-	const answerValues = Object.values(entry.answers);
-	const answeredCount = answerValues.length;
-	const correctCount = answerValues.filter((a) => a.isCorrect).length;
-	const bestScorePercent =
-		answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : exam.bestScorePercent;
+	const answeredCount = Object.keys(entry.answers).length;
 
 	return {
 		...exam,
 		answeredCount,
-		lastQuestionIndex: entry.lastQuestionIndex,
-		bestScorePercent
+		lastQuestionIndex: entry.lastQuestionIndex
 	};
 }
 

@@ -41,7 +41,7 @@ frontend/
         │   ├── client.ts           # Base fetch wrapper (PUBLIC_TEST_FLAG, PUBLIC_API_BASE_URL, X-Client-Id)
         │   └── exams.ts            # Typed API functions switching between mock and real Rust backend
         ├── mocks/
-        │   └── exams.ts            # Server-behavior mock implementations (used when PUBLIC_TEST_FLAG=yes)
+        │   └── exams.ts            # Server-behavior mock implementations (used when PUBLIC_TEST_FLAG=Y)
         ├── types/
         │   └── exam.ts             # Shared TypeScript interfaces matching the Rust JSON contract
         ├── state/
@@ -57,13 +57,13 @@ frontend/
 
 ## 3. Architecture & Data Flow
 
-The frontend is **server-driven**: it does not filter, paginate, grade, or cache exam datasets in memory. All business calculations reside on the backend (simulated by `src/lib/mocks/exams.ts` while `PUBLIC_TEST_FLAG=yes`).
+The frontend is **server-driven**: it does not filter, paginate, grade, or cache exam datasets in memory. All business calculations reside on the backend (simulated by `src/lib/mocks/exams.ts` while `PUBLIC_TEST_FLAG=Y`).
 
 ```mermaid
 flowchart LR
     UI["SvelteKit Pages (+page.svelte)"] -->|"Typed calls"| API["lib/api/exams.ts"]
-    API -->|"PUBLIC_TEST_FLAG=yes"| Mock["lib/mocks/exams.ts"]
-    API -->|"PUBLIC_TEST_FLAG=no"| Client["lib/api/client.ts (X-Client-Id)"]
+    API -->|"PUBLIC_TEST_FLAG=Y"| Mock["lib/mocks/exams.ts"]
+    API -->|"PUBLIC_TEST_FLAG=N"| Client["lib/api/client.ts (X-Client-Id)"]
     Client -->|"HTTP + JSON"| Rust["Rust Backend API"]
     Rust -->|"SQL"| PG[("PostgreSQL (dumb)")]
 ```
@@ -81,11 +81,11 @@ flowchart LR
 
 ### State Management & Browser Storage
 - **Component & Cross-Route State:** Uses Svelte 5 runes (`$state`, `$derived`, `$effect`). Shared header state (`examCode`, `showVi`) lives in `src/lib/state/header.svelte.ts`.
-- **Zero Data Caching:** When `PUBLIC_TEST_FLAG=no`, no exam lists, questions, or answers are cached in the browser.
+- **Zero Data Caching:** When `PUBLIC_TEST_FLAG=N`, no exam lists, questions, or answers are cached in the browser.
 - **`localStorage` Keys:**
   - `dump_client_id`: Auto-generated UUID (`crypto.randomUUID()`) sent on every real API request via the `X-Client-Id` header.
   - `dump_show_vi`: Persists whether the **`VN`** bilingual translation toggle is active.
-  - `dump_mock_progress_v1`: Used **only** by `src/lib/mocks/exams.ts` when `PUBLIC_TEST_FLAG=yes`.
+  - `dump_mock_progress_v1`: Used **only** by `src/lib/mocks/exams.ts` when `PUBLIC_TEST_FLAG=Y`.
 
 ### Styling & Dark Mode
 - **Dark Mode Only:** Configured via `@theme` tokens (`--color-bg`, `--color-surface`, `--color-surface-hover`, `--color-border`, `--color-text`, `--color-text-muted`, `--color-accent`) and `color-scheme: dark` in `src/routes/layout.css`. No light-mode theme or toggle is included.
