@@ -21,7 +21,7 @@ This document describes the technology stack, folder structure, data flow, and a
 
 ```text
 frontend/
-├── vite.config.ts                  # Vite + SvelteKit config (env.dir = '..' to read root .env)
+├── vite.config.ts                  # Vite + SvelteKit config (@sveltejs/adapter-node, env.dir = '..')
 ├── tsconfig.json                   # TypeScript config with #lib/* path aliases
 ├── eslint.config.js                # ESLint flat config (tsconfigRootDir = import.meta.dirname)
 └── src/
