@@ -8,7 +8,6 @@ export interface ExamSummary {
 	totalQuestions: number;
 	answeredCount: number;
 	lastQuestionIndex: number | null;
-	bestScorePercent: number | null;
 	updatedAt: string;
 }
 

@@ -5,7 +5,7 @@ This document defines the HTTP + JSON contract expected by the SvelteKit fronten
 ## Base Configuration
 
 - **Base URL:** Configured via `PUBLIC_API_BASE_URL` in `.env` (default: `http://localhost:8080`).
-- **Mock Toggle:** Set `PUBLIC_TEST_FLAG=no` in `.env` to switch the frontend from mock data to these real backend endpoints.
+- **Mock Toggle:** Set `PUBLIC_TEST_FLAG=N` in `.env` to switch the frontend from mock data to these real backend endpoints (`Y` for mock mode).
 - **CORS:** Allow origin `http://localhost:5173` (and production frontend origin), methods `GET, POST, OPTIONS`, and headers `Content-Type, X-Client-Id`.
 
 ## Common Request Headers
@@ -46,7 +46,6 @@ Returns a paginated list of exam summaries with the client's current progress.
       "totalQuestions": 120,
       "answeredCount": 42,
       "lastQuestionIndex": 43,
-      "bestScorePercent": 78,
       "updatedAt": "2026-11-20"
     }
   ],
@@ -77,7 +76,6 @@ Returns full metadata and per-topic progress for a single exam without loading t
   "totalQuestions": 120,
   "answeredCount": 42,
   "lastQuestionIndex": 43,
-  "bestScorePercent": 78,
   "updatedAt": "2026-11-20",
   "description": "Practice questions covering product information, inventory control, procurement, sales, and warehouse management in Dynamics 365 Supply Chain Management.",
   "descriptionVi": "Bộ câu hỏi luyện tập về quản lý thông tin sản phẩm, kiểm soát tồn kho, mua hàng, bán hàng và quản lý kho trong Dynamics 365 Supply Chain Management.",
@@ -135,7 +133,6 @@ Loads one question by its actual exam question number (`q`), optionally scoped t
     "totalQuestions": 120,
     "answeredCount": 42,
     "lastQuestionIndex": 43,
-    "bestScorePercent": 78,
     "updatedAt": "2026-11-20",
     "description": "...",
     "descriptionVi": "...",
@@ -157,6 +154,7 @@ Loads one question by its actual exam question number (`q`), optionally scoped t
     "prompt": "...",
     "promptVi": "...",
     "multipleChoice": false,
+    "showAnswerByDefault": false,
     "options": [
       {
         "id": "a",
@@ -169,7 +167,8 @@ Loads one question by its actual exam question number (`q`), optionally scoped t
     "explanation": "...",
     "explanationVi": "...",
     "keywords": ["Location directives", "Restrict by unit", "Pallet"],
-    "keywordsVi": ["Chỉ dẫn vị trí kho", "Giới hạn theo đơn vị", "Pallet"]
+    "keywordsVi": ["Chỉ dẫn vị trí kho", "Giới hạn theo đơn vị", "Pallet"],
+    "images": []
   },
   "answer": {
     "questionId": "mb-330-q-43",
@@ -187,6 +186,9 @@ Loads one question by its actual exam question number (`q`), optionally scoped t
 
 - `answer` is `null` if the client has not answered this question yet.
 - `navItems[].status` is one of `"unanswered" | "correct" | "incorrect"`.
+- `showAnswerByDefault` is `true` for non-choice questions such as `SIMULATION` (`options: []`, `correctOptionIds: []`).
+- `images` holds `{ id, url, alt? }` entries referenced inline via `[[img:<id>]]` placeholders in `prompt`/`explanation`.
+- Health check endpoint: `GET /health` returns `200 OK` (`{ "status": "ok" }`).
 
 ---
 

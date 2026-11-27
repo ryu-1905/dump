@@ -65,11 +65,6 @@
 		<!-- Metadata -->
 		<div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
 			<span>{exam.totalQuestions} questions</span>
-			{#if exam.bestScorePercent !== null}
-				<span>
-					Best score: <strong class="font-medium text-text">{exam.bestScorePercent}%</strong>
-				</span>
-			{/if}
 			{#if status === 'in_progress' && exam.lastQuestionIndex !== null}
 				<span>Last: <strong class="font-medium text-text">#{exam.lastQuestionIndex}</strong></span>
 			{/if}
