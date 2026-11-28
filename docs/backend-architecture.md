@@ -19,7 +19,7 @@ This document describes the technology stack, folder structure, request flow, an
 
 ## 2. Directory Structure
 
-- **CORS:** Configured via `CORS_ORIGIN`, allowing `GET, POST, PUT, OPTIONS` and `Content-Type, X-Client-Id`.
+- **CORS:** Configured via `CORS_ORIGIN`, allowing `GET, POST, PUT, DELETE, OPTIONS` and `Content-Type, X-Client-Id`.
 - **Migrations:**
 ```text
 backend/
@@ -28,7 +28,8 @@ backend/
 │   ├── 20261127144440_init.sql
 │   ├── 20261127151306_add_show_answer_by_default.sql
 │   ├── 20261127163324_drop_best_score_percent.sql
-│   └── 20261128043957_add_clients_table.sql
+│   ├── 20261128043957_add_clients_table.sql
+│   └── 20261128073500_v2_microsoft_exam_schema.sql
 ├── seeds/                                          # Idempotent seed SQL scripts
 │   └── 001_mb330_20q.sql
 └── src/
@@ -60,11 +61,11 @@ flowchart LR
     Routes -->|Err(AppError)| Error["error.rs (400 / 404 / 500 JSON)"]
 ```
 
-- **Thin Routes (`routes/exams.rs`):** Parse `X-Client-Id` (`3–64` chars `[a-zA-Z0-9_-]`; malformed values return `400 Bad Request`), validate query/body bounds, and delegate to `exam_repo`. Includes client ID lifecycle endpoints (`/clients/register`, `/clients/ensure`, `/clients/id`, `/clients/sync`).
+- **Thin Routes (`routes/exams.rs`):** Parse `X-Client-Id` (`3–64` chars `[a-zA-Z0-9_-]`; malformed values return `400 Bad Request`), validate query/body bounds, and delegate to `exam_repo`. Includes client ID lifecycle endpoints (`/clients/register`, `/clients/ensure`, `/clients/id`, `/clients/sync`) and Mark-for-review flag endpoints (`PUT/DELETE /exams/{id}/flags`).
 - **Static SQL (`repositories/exam_repo.rs`):** All SQL statements are `&'static str` constants (or `concat!`-built `&'static str`) to satisfy `sqlx 0.9` `SqlSafeStr` checks without dynamic string interpolation.
 - **Transactional Answer Grading (`submit_exam_answer`):**
-  - Validates `questionIndex`, option IDs, single-choice vs. multiple-choice rules, and blocks submissions on `SIMULATION` questions (`show_answer_by_default = true` with empty `options`).
-  - Evaluates `is_correct` via order-independent `HashSet` comparison against `correct_option_ids`.
+  - Validates `questionIndex`, `spec`, and `questionType` rules across all 5 types (`single_choice`, `multiple_choice`, `hotspot`, `drag_drop`, rejecting `simulation` submissions with `400`).
+  - Evaluates partial credit (`earned_points` / `max_points`) and `is_correct` in Rust (`grade_answer`).
   - When `X-Client-Id` is present, upserts `client_answers` and `client_exam_progress.last_question_index` atomically inside a PostgreSQL transaction.
 
 ---

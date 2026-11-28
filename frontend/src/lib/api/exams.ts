@@ -1,16 +1,25 @@
 import { apiRequest, USE_MOCK_API } from '#lib/api/client';
 import {
+	mockFlagQuestion,
 	mockGetExamOverview,
 	mockGetExamQuestion,
 	mockListExams,
-	mockSubmitAnswer
+	mockResetExamProgress,
+	mockResetQuestionAnswer,
+	mockSubmitAnswer,
+	mockUnflagQuestion
 } from '#lib/mocks/exams';
 import type {
 	ExamAnswerRecord,
 	ExamDetail,
 	ExamListParams,
 	ExamQuestionPayload,
+	FlagQuestionRequest,
+	FlagQuestionResponse,
 	PaginatedExamsResponse,
+	QuestionFilter,
+	ResetExamResponse,
+	ResetQuestionResponse,
 	SubmitAnswerRequest
 } from '#lib/types/exam';
 import { getClientId } from '#lib/utils/client-id';
@@ -44,7 +53,12 @@ export async function getExamOverview(examId: string): Promise<ExamDetail> {
 
 export async function getExamQuestion(
 	examId: string,
-	options: { topicId?: string | null; q?: number | null } = {}
+	options: {
+		topicId?: string | null;
+		caseStudyId?: string | null;
+		filter?: QuestionFilter | null;
+		q?: number | null;
+	} = {}
 ): Promise<ExamQuestionPayload> {
 	getClientId();
 
@@ -54,6 +68,8 @@ export async function getExamQuestion(
 
 	const qs = new URLSearchParams();
 	if (options.topicId) qs.set('topic', options.topicId);
+	if (options.caseStudyId) qs.set('case_study', options.caseStudyId);
+	if (options.filter && options.filter !== 'all') qs.set('filter', options.filter);
 	if (options.q !== undefined && options.q !== null) qs.set('q', String(options.q));
 	const query = qs.toString();
 	return apiRequest<ExamQuestionPayload>(
@@ -75,6 +91,66 @@ export async function submitExamAnswer(
 	return apiRequest<ExamAnswerRecord>(`/exams/${encodeURIComponent(examId)}/answers`, {
 		method: 'POST',
 		body: JSON.stringify(payload)
+	});
+}
+
+export async function flagQuestion(
+	examId: string,
+	payload: FlagQuestionRequest
+): Promise<FlagQuestionResponse> {
+	getClientId();
+
+	if (USE_MOCK_API) {
+		return mockFlagQuestion(examId, payload);
+	}
+	return apiRequest<FlagQuestionResponse>(`/exams/${encodeURIComponent(examId)}/flags`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+}
+
+export async function unflagQuestion(
+	examId: string,
+	questionId: string
+): Promise<FlagQuestionResponse> {
+	getClientId();
+
+	if (USE_MOCK_API) {
+		return mockUnflagQuestion(examId, questionId);
+	}
+	return apiRequest<FlagQuestionResponse>(
+		`/exams/${encodeURIComponent(examId)}/flags/${encodeURIComponent(questionId)}`,
+		{
+			method: 'DELETE'
+		}
+	);
+}
+
+export async function resetQuestionAnswer(
+	examId: string,
+	questionId: string
+): Promise<ResetQuestionResponse> {
+	getClientId();
+
+	if (USE_MOCK_API) {
+		return mockResetQuestionAnswer(examId, questionId);
+	}
+	return apiRequest<ResetQuestionResponse>(
+		`/exams/${encodeURIComponent(examId)}/answers/${encodeURIComponent(questionId)}`,
+		{
+			method: 'DELETE'
+		}
+	);
+}
+
+export async function resetExamProgress(examId: string): Promise<ResetExamResponse> {
+	getClientId();
+
+	if (USE_MOCK_API) {
+		return mockResetExamProgress(examId);
+	}
+	return apiRequest<ResetExamResponse>(`/exams/${encodeURIComponent(examId)}/answers`, {
+		method: 'DELETE'
 	});
 }
 

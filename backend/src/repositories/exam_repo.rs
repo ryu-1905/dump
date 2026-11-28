@@ -1,13 +1,17 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
+use serde_json::Value;
 use sqlx::{FromRow, PgPool, types::Json};
 
 use crate::{
     error::AppError,
     models::exam::{
-        ClientInfoResponse, ExamAnswerRecord, ExamDetail, ExamQuestion, ExamQuestionPayload,
-        ExamSummary, ExamTopic, NormalizedExamListParams, PaginatedExamsResponse, QuestionImage,
-        QuestionNavItem, QuestionNavStatus, QuestionOption, SubmitAnswerRequest,
+        AnswerValue, CaseStudy, CaseStudySection, ChoiceSpec, ClientInfoResponse, DragDropSpec,
+        ExamAnswerRecord, ExamDetail, ExamQuestion, ExamQuestionPayload, ExamSummary, ExamTopic,
+        FlagQuestionRequest, FlagQuestionResponse, HotspotSpec, NormalizedExamListParams,
+        PaginatedExamsResponse, QuestionFilter, QuestionImage, QuestionNavItem,
+        QuestionNavStatus, QuestionType, ResetExamResponse, ResetQuestionResponse,
+        SubmitAnswerRequest,
     },
 };
 
@@ -242,29 +246,51 @@ SELECT
     q.id,
     q.topic_id,
     q.question_index,
-    ca.selected_option_ids,
-    ca.is_correct
+    ca.submitted_answer,
+    ca.earned_points,
+    ca.max_points AS answer_max_points,
+    ca.is_correct,
+    (cf.question_id IS NOT NULL) AS is_flagged
 FROM questions q
 LEFT JOIN client_answers ca
     ON ca.question_id = q.id
    AND $2::text IS NOT NULL
    AND ca.client_id = $2::text
+LEFT JOIN client_question_flags cf
+    ON cf.question_id = q.id
+   AND $2::text IS NOT NULL
+   AND cf.client_id = $2::text
 WHERE q.exam_id = $1
   AND ($3::text IS NULL OR q.topic_id = $3::text)
+  AND ($4::text IS NULL OR q.case_study_id = $4::text)
+  AND (
+      $5::text = 'all'
+      OR ($5::text = 'wrong' AND ca.is_correct = FALSE)
+      OR ($5::text = 'flagged' AND cf.question_id IS NOT NULL)
+  )
 ORDER BY q.question_index ASC
+"#;
+
+const COUNT_FLAGGED_QUESTIONS_SQL: &str = r#"
+SELECT COUNT(*)::bigint
+FROM client_question_flags
+WHERE $1::text IS NOT NULL
+  AND client_id = $1::text
+  AND exam_id = $2
 "#;
 
 const GET_QUESTION_DETAIL_SQL: &str = r#"
 SELECT
     id,
     topic_id,
+    case_study_id,
     question_index,
+    question_type,
     prompt,
     prompt_vi,
-    multiple_choice,
-    show_answer_by_default,
-    options,
-    correct_option_ids,
+    spec,
+    answer_key,
+    max_points,
     explanation,
     explanation_vi,
     keywords,
@@ -272,6 +298,17 @@ SELECT
     images
 FROM questions
 WHERE id = $1
+"#;
+
+const GET_CASE_STUDY_SQL: &str = r#"
+SELECT
+    id,
+    title,
+    title_vi,
+    sections,
+    images
+FROM case_studies
+WHERE exam_id = $1 AND id = $2
 "#;
 
 const UPSERT_LAST_QUESTION_SQL: &str = r#"
@@ -287,21 +324,25 @@ struct ScopedQuestionRow {
     id: String,
     topic_id: String,
     question_index: i32,
-    selected_option_ids: Option<Vec<String>>,
+    submitted_answer: Option<Json<AnswerValue>>,
+    earned_points: Option<i16>,
+    answer_max_points: Option<i16>,
     is_correct: Option<bool>,
+    is_flagged: bool,
 }
 
 #[derive(Debug, FromRow)]
 struct QuestionDetailRow {
     id: String,
     topic_id: String,
+    case_study_id: Option<String>,
     question_index: i32,
+    question_type: QuestionType,
     prompt: String,
     prompt_vi: Option<String>,
-    multiple_choice: bool,
-    show_answer_by_default: bool,
-    options: Json<Vec<QuestionOption>>,
-    correct_option_ids: Vec<String>,
+    spec: Value,
+    answer_key: Option<Json<AnswerValue>>,
+    max_points: i16,
     explanation: String,
     explanation_vi: Option<String>,
     keywords: Vec<String>,
@@ -309,12 +350,23 @@ struct QuestionDetailRow {
     images: Json<Vec<QuestionImage>>,
 }
 
-/// Loads one practice question (optionally scoped to a topic) and records `last_question_index`.
+#[derive(Debug, FromRow)]
+struct CaseStudyRow {
+    id: String,
+    title: String,
+    title_vi: Option<String>,
+    sections: Json<Vec<CaseStudySection>>,
+    images: Json<Vec<QuestionImage>>,
+}
+
+/// Loads one practice question (optionally scoped to topic/case_study/filter) and records `last_question_index`.
 pub async fn get_exam_question(
     pool: &PgPool,
     exam_id: &str,
     client_id: Option<&str>,
     topic_id: Option<&str>,
+    case_study_id: Option<&str>,
+    filter: QuestionFilter,
     requested_q: Option<i32>,
 ) -> Result<ExamQuestionPayload, AppError> {
     let mut exam = get_exam_overview(pool, exam_id, client_id).await?;
@@ -323,20 +375,22 @@ pub async fn get_exam_question(
         .bind(exam_id)
         .bind(client_id)
         .bind(topic_id)
+        .bind(case_study_id)
+        .bind(filter.as_str())
         .fetch_all(pool)
         .await?;
 
     if scoped.is_empty() {
-        let msg = match topic_id {
-            Some(topic) => format!("no questions found for topic '{topic}' in exam '{exam_id}'"),
-            None => format!("no questions found for exam '{exam_id}'"),
-        };
-        return Err(AppError::NotFound(msg));
+        return Err(AppError::NotFound(format!(
+            "no matching questions found in exam '{exam_id}'"
+        )));
     }
 
     let selected_pos = if let Some(q) = requested_q {
         scoped.iter().position(|row| row.question_index == q).unwrap_or(0)
     } else if topic_id.is_none()
+        && case_study_id.is_none()
+        && filter == QuestionFilter::All
         && let Some(last_q) = exam.summary.last_question_index
     {
         scoped
@@ -370,12 +424,21 @@ pub async fn get_exam_question(
         }
     }
 
-    let answer = match (&selected.selected_option_ids, selected.is_correct) {
-        (Some(selected_option_ids), Some(is_correct)) => Some(ExamAnswerRecord {
-            question_id: selected.id.clone(),
-            selected_option_ids: selected_option_ids.clone(),
-            is_correct,
-        }),
+    let answer = match (
+        &selected.submitted_answer,
+        selected.earned_points,
+        selected.answer_max_points,
+        selected.is_correct,
+    ) {
+        (Some(submitted), Some(earned_points), Some(max_points), Some(is_correct)) => {
+            Some(ExamAnswerRecord {
+                question_id: selected.id.clone(),
+                submitted_answer: submitted.0.clone(),
+                earned_points,
+                max_points,
+                is_correct,
+            })
+        }
         _ => None,
     };
 
@@ -388,6 +451,7 @@ pub async fn get_exam_question(
                 Some(true) => QuestionNavStatus::Correct,
                 Some(false) => QuestionNavStatus::Incorrect,
             },
+            is_flagged: row.is_flagged,
         })
         .collect();
 
@@ -396,16 +460,40 @@ pub async fn get_exam_question(
         .fetch_one(pool)
         .await?;
 
+    let case_study = if let Some(cs_id) = detail.case_study_id.as_deref() {
+        let cs_row: Option<CaseStudyRow> = sqlx::query_as(GET_CASE_STUDY_SQL)
+            .bind(exam_id)
+            .bind(cs_id)
+            .fetch_optional(pool)
+            .await?;
+        cs_row.map(|row| CaseStudy {
+            id: row.id,
+            title: row.title,
+            title_vi: row.title_vi,
+            sections: row.sections.0,
+            images: row.images.0,
+        })
+    } else {
+        None
+    };
+
+    let flagged_count: i64 = sqlx::query_scalar(COUNT_FLAGGED_QUESTIONS_SQL)
+        .bind(client_id)
+        .bind(exam_id)
+        .fetch_one(pool)
+        .await?;
+
     let question = ExamQuestion {
         id: detail.id,
         topic_id: detail.topic_id,
+        case_study_id: detail.case_study_id,
         index: detail.question_index,
+        question_type: detail.question_type,
         prompt: detail.prompt,
         prompt_vi: detail.prompt_vi,
-        multiple_choice: detail.multiple_choice,
-        show_answer_by_default: detail.show_answer_by_default,
-        options: detail.options.0,
-        correct_option_ids: detail.correct_option_ids,
+        spec: detail.spec,
+        answer_key: detail.answer_key.map(|key| key.0),
+        max_points: detail.max_points,
         explanation: detail.explanation,
         explanation_vi: detail.explanation_vi,
         keywords: detail.keywords,
@@ -421,19 +509,22 @@ pub async fn get_exam_question(
         total_in_scope,
         current_index,
         question,
+        case_study,
         answer,
+        is_flagged: selected.is_flagged,
         nav_items,
         answered_count,
+        flagged_count,
     })
 }
 
 const GET_QUESTION_FOR_GRADING_SQL: &str = r#"
 SELECT
     question_index,
-    multiple_choice,
-    show_answer_by_default,
-    options,
-    correct_option_ids
+    question_type,
+    spec,
+    answer_key,
+    max_points
 FROM questions
 WHERE exam_id = $1 AND id = $2
 "#;
@@ -441,12 +532,14 @@ WHERE exam_id = $1 AND id = $2
 const UPSERT_CLIENT_ANSWER_SQL: &str = r#"
 INSERT INTO client_answers (
     client_id, question_id, exam_id, question_index,
-    selected_option_ids, is_correct, answered_at
+    submitted_answer, earned_points, max_points, is_correct, answered_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, NOW())
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
 ON CONFLICT (client_id, question_id) DO UPDATE SET
     question_index = EXCLUDED.question_index,
-    selected_option_ids = EXCLUDED.selected_option_ids,
+    submitted_answer = EXCLUDED.submitted_answer,
+    earned_points = EXCLUDED.earned_points,
+    max_points = EXCLUDED.max_points,
     is_correct = EXCLUDED.is_correct,
     answered_at = NOW()
 "#;
@@ -464,13 +557,208 @@ ON CONFLICT (client_id, exam_id) DO UPDATE SET
 #[derive(Debug, FromRow)]
 struct QuestionForGradingRow {
     question_index: i32,
-    multiple_choice: bool,
-    show_answer_by_default: bool,
-    options: Json<Vec<QuestionOption>>,
-    correct_option_ids: Vec<String>,
+    question_type: QuestionType,
+    spec: Value,
+    answer_key: Option<Json<AnswerValue>>,
+    max_points: i16,
 }
 
-/// Evaluates selected option(s), persists the answer and progress, and returns the graded record.
+/// Validates and grades a submitted answer against `spec` and `answer_key` for all 5 question types.
+pub(crate) fn grade_answer(
+    question_id: &str,
+    question_type: QuestionType,
+    spec: &Value,
+    answer_key: Option<&AnswerValue>,
+    max_points: i16,
+    submitted: &AnswerValue,
+) -> Result<(AnswerValue, i16, bool), AppError> {
+    match question_type {
+        QuestionType::Simulation => Err(AppError::BadRequest(format!(
+            "question '{question_id}' is a simulation without gradable input"
+        ))),
+        QuestionType::SingleChoice | QuestionType::MultipleChoice => {
+            let AnswerValue::Choice(raw_selected) = submitted else {
+                return Err(AppError::BadRequest(format!(
+                    "question '{question_id}' expects an array of selected option IDs"
+                )));
+            };
+            let Some(AnswerValue::Choice(expected)) = answer_key else {
+                return Err(AppError::Config(format!(
+                    "question '{question_id}' is missing a valid choice answer_key"
+                )));
+            };
+
+            let choice_spec: ChoiceSpec = serde_json::from_value(spec.clone()).map_err(|err| {
+                AppError::Config(format!("invalid choice spec on '{question_id}': {err}"))
+            })?;
+            let valid_ids: HashSet<&str> =
+                choice_spec.options.iter().map(|opt| opt.id.as_str()).collect();
+
+            let mut seen = HashSet::with_capacity(raw_selected.len());
+            let mut normalized = Vec::with_capacity(raw_selected.len());
+            for raw in raw_selected {
+                let id = raw.trim();
+                if !valid_ids.contains(id) {
+                    return Err(AppError::BadRequest(format!(
+                        "invalid option id '{id}' for question '{question_id}'"
+                    )));
+                }
+                if seen.insert(id.to_string()) {
+                    normalized.push(id.to_string());
+                }
+            }
+
+            if question_type == QuestionType::SingleChoice {
+                if normalized.len() != 1 {
+                    return Err(AppError::BadRequest(
+                        "single-choice question requires exactly one selected option".to_string(),
+                    ));
+                }
+                let expected_set: HashSet<&str> = expected.iter().map(String::as_str).collect();
+                let is_correct = expected_set.contains(normalized[0].as_str());
+                let earned = if is_correct { max_points } else { 0 };
+                return Ok((AnswerValue::Choice(normalized), earned, is_correct));
+            }
+
+            let required_count = choice_spec.required_count.unwrap_or(expected.len());
+            if normalized.is_empty() {
+                return Err(AppError::BadRequest(
+                    "at least one option must be selected".to_string(),
+                ));
+            }
+            if normalized.len() > required_count {
+                return Err(AppError::BadRequest(format!(
+                    "multiple-choice question allows at most {required_count} selected options"
+                )));
+            }
+
+            let expected_set: HashSet<&str> = expected.iter().map(String::as_str).collect();
+            let selected_set: HashSet<&str> = normalized.iter().map(String::as_str).collect();
+            let matches = selected_set.intersection(&expected_set).count();
+            let earned = (matches as i16).min(max_points);
+            let is_correct = expected_set == selected_set;
+            Ok((AnswerValue::Choice(normalized), earned, is_correct))
+        }
+        QuestionType::Hotspot => {
+            let AnswerValue::Mapping(raw_map) = submitted else {
+                return Err(AppError::BadRequest(format!(
+                    "question '{question_id}' expects an object mapping slot IDs to choice IDs"
+                )));
+            };
+            let Some(AnswerValue::Mapping(expected)) = answer_key else {
+                return Err(AppError::Config(format!(
+                    "question '{question_id}' is missing a valid mapping answer_key"
+                )));
+            };
+
+            let hs_spec: HotspotSpec = serde_json::from_value(spec.clone()).map_err(|err| {
+                AppError::Config(format!("invalid hotspot spec on '{question_id}': {err}"))
+            })?;
+
+            let slot_choices: HashMap<&str, HashSet<&str>> = hs_spec
+                .slots
+                .iter()
+                .map(|slot| {
+                    let choices = slot.choices.iter().map(|c| c.id.as_str()).collect();
+                    (slot.id.as_str(), choices)
+                })
+                .collect();
+
+            let mut normalized = BTreeMap::new();
+            for (raw_slot, raw_choice) in raw_map {
+                let slot_id = raw_slot.trim();
+                let choice_id = raw_choice.trim();
+                let Some(valid_choices) = slot_choices.get(slot_id) else {
+                    return Err(AppError::BadRequest(format!(
+                        "invalid slot id '{slot_id}' for question '{question_id}'"
+                    )));
+                };
+                if !valid_choices.contains(choice_id) {
+                    return Err(AppError::BadRequest(format!(
+                        "invalid choice id '{choice_id}' for slot '{slot_id}'"
+                    )));
+                }
+                normalized.insert(slot_id.to_string(), choice_id.to_string());
+            }
+
+            if normalized.len() != hs_spec.slots.len() {
+                return Err(AppError::BadRequest(format!(
+                    "all {} hotspot slots must be answered",
+                    hs_spec.slots.len()
+                )));
+            }
+
+            let matches = expected
+                .iter()
+                .filter(|(slot, ans)| normalized.get(*slot) == Some(*ans))
+                .count();
+            let earned = (matches as i16).min(max_points);
+            let is_correct = matches == expected.len() && normalized.len() == expected.len();
+            Ok((AnswerValue::Mapping(normalized), earned, is_correct))
+        }
+        QuestionType::DragDrop => {
+            let AnswerValue::Mapping(raw_map) = submitted else {
+                return Err(AppError::BadRequest(format!(
+                    "question '{question_id}' expects an object mapping target IDs to pool IDs"
+                )));
+            };
+            let Some(AnswerValue::Mapping(expected)) = answer_key else {
+                return Err(AppError::Config(format!(
+                    "question '{question_id}' is missing a valid mapping answer_key"
+                )));
+            };
+
+            let dd_spec: DragDropSpec = serde_json::from_value(spec.clone()).map_err(|err| {
+                AppError::Config(format!("invalid drag_drop spec on '{question_id}': {err}"))
+            })?;
+
+            let valid_targets: HashSet<&str> =
+                dd_spec.targets.iter().map(|t| t.id.as_str()).collect();
+            let valid_pool: HashSet<&str> = dd_spec.pool.iter().map(|p| p.id.as_str()).collect();
+
+            let mut normalized = BTreeMap::new();
+            let mut used_pool = HashSet::new();
+
+            for (raw_target, raw_pool) in raw_map {
+                let target_id = raw_target.trim();
+                let pool_id = raw_pool.trim();
+                if !valid_targets.contains(target_id) {
+                    return Err(AppError::BadRequest(format!(
+                        "invalid target id '{target_id}' for question '{question_id}'"
+                    )));
+                }
+                if !valid_pool.contains(pool_id) {
+                    return Err(AppError::BadRequest(format!(
+                        "invalid pool id '{pool_id}' for question '{question_id}'"
+                    )));
+                }
+                if !dd_spec.reusable && !used_pool.insert(pool_id.to_string()) {
+                    return Err(AppError::BadRequest(format!(
+                        "pool item '{pool_id}' cannot be reused for question '{question_id}'"
+                    )));
+                }
+                normalized.insert(target_id.to_string(), pool_id.to_string());
+            }
+
+            if normalized.len() != dd_spec.targets.len() {
+                return Err(AppError::BadRequest(format!(
+                    "all {} drag-and-drop targets must be filled",
+                    dd_spec.targets.len()
+                )));
+            }
+
+            let matches = expected
+                .iter()
+                .filter(|(target, ans)| normalized.get(*target) == Some(*ans))
+                .count();
+            let earned = (matches as i16).min(max_points);
+            let is_correct = matches == expected.len() && normalized.len() == expected.len();
+            Ok((AnswerValue::Mapping(normalized), earned, is_correct))
+        }
+    }
+}
+
+/// Evaluates a submitted answer, persists partial/full points and progress, and returns the graded record.
 pub async fn submit_exam_answer(
     pool: &PgPool,
     exam_id: &str,
@@ -497,47 +785,19 @@ pub async fn submit_exam_answer(
         )));
     }
 
-    if row.show_answer_by_default && row.options.0.is_empty() {
-        return Err(AppError::BadRequest(format!(
-            "question '{question_id}' is a simulation without selectable options"
-        )));
-    }
-
-    let valid_option_ids: HashSet<&str> = row.options.0.iter().map(|opt| opt.id.as_str()).collect();
-    let mut seen = HashSet::with_capacity(req.selected_option_ids.len());
-    let mut normalized_selected = Vec::with_capacity(req.selected_option_ids.len());
-
-    for raw_id in &req.selected_option_ids {
-        let opt_id = raw_id.trim();
-        if !valid_option_ids.contains(opt_id) {
-            return Err(AppError::BadRequest(format!(
-                "invalid option id '{opt_id}' for question '{question_id}'"
-            )));
-        }
-        if seen.insert(opt_id.to_string()) {
-            normalized_selected.push(opt_id.to_string());
-        }
-    }
-
-    if !row.multiple_choice && normalized_selected.len() != 1 {
-        return Err(AppError::BadRequest(
-            "single-choice question requires exactly one selected option".to_string(),
-        ));
-    }
-    if row.multiple_choice && normalized_selected.is_empty() {
-        return Err(AppError::BadRequest(
-            "at least one option must be selected".to_string(),
-        ));
-    }
-
-    let expected_set: HashSet<&str> = row.correct_option_ids.iter().map(String::as_str).collect();
-    let selected_set: HashSet<&str> = normalized_selected.iter().map(String::as_str).collect();
-    let is_correct = expected_set == selected_set;
+    let (normalized_answer, earned_points, is_correct) = grade_answer(
+        question_id,
+        row.question_type,
+        &row.spec,
+        row.answer_key.as_ref().map(|k| &k.0),
+        row.max_points,
+        &req.submitted_answer,
+    )?;
 
     if let Some(cid) = client_id {
         let mut tx = pool.begin().await?;
 
-        sqlx::query("INSERT INTO clients (id) VALUES ($1) ON CONFLICT (id) DO NOTHING")
+        sqlx::query(ENSURE_CLIENT_SQL)
             .bind(cid)
             .execute(&mut *tx)
             .await?;
@@ -547,7 +807,9 @@ pub async fn submit_exam_answer(
             .bind(question_id)
             .bind(exam_id)
             .bind(row.question_index)
-            .bind(&normalized_selected)
+            .bind(Json(&normalized_answer))
+            .bind(earned_points)
+            .bind(row.max_points)
             .bind(is_correct)
             .execute(&mut *tx)
             .await?;
@@ -564,8 +826,154 @@ pub async fn submit_exam_answer(
 
     Ok(ExamAnswerRecord {
         question_id: question_id.to_string(),
-        selected_option_ids: normalized_selected,
+        submitted_answer: normalized_answer,
+        earned_points,
+        max_points: row.max_points,
         is_correct,
+    })
+}
+
+const GET_QUESTION_INDEX_SQL: &str = r#"
+SELECT question_index
+FROM questions
+WHERE exam_id = $1 AND id = $2
+"#;
+
+const UPSERT_QUESTION_FLAG_SQL: &str = r#"
+INSERT INTO client_question_flags (client_id, question_id, exam_id, question_index, flagged_at)
+VALUES ($1, $2, $3, $4, NOW())
+ON CONFLICT (client_id, question_id) DO NOTHING
+"#;
+
+const DELETE_QUESTION_FLAG_SQL: &str = r#"
+DELETE FROM client_question_flags
+WHERE client_id = $1 AND exam_id = $2 AND question_id = $3
+"#;
+
+/// Marks a question for review (`client_question_flags`), independent of whether it has been answered.
+pub async fn flag_question(
+    pool: &PgPool,
+    exam_id: &str,
+    client_id: &str,
+    req: &FlagQuestionRequest,
+) -> Result<FlagQuestionResponse, AppError> {
+    let question_id = req.question_id.trim();
+
+    let actual_index: i32 = sqlx::query_scalar(GET_QUESTION_INDEX_SQL)
+        .bind(exam_id)
+        .bind(question_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| {
+            AppError::NotFound(format!(
+                "question '{question_id}' not found in exam '{exam_id}'"
+            ))
+        })?;
+
+    if req.question_index != actual_index {
+        return Err(AppError::BadRequest(format!(
+            "questionIndex {} does not match question '{question_id}' (expected {actual_index})",
+            req.question_index
+        )));
+    }
+
+    let mut tx = pool.begin().await?;
+    sqlx::query(ENSURE_CLIENT_SQL)
+        .bind(client_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query(UPSERT_QUESTION_FLAG_SQL)
+        .bind(client_id)
+        .bind(question_id)
+        .bind(exam_id)
+        .bind(actual_index)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+
+    Ok(FlagQuestionResponse {
+        question_id: question_id.to_string(),
+        is_flagged: true,
+    })
+}
+
+/// Removes a question's "Mark for review" flag for the given client.
+pub async fn unflag_question(
+    pool: &PgPool,
+    exam_id: &str,
+    client_id: &str,
+    question_id: &str,
+) -> Result<FlagQuestionResponse, AppError> {
+    let qid = question_id.trim();
+    sqlx::query(DELETE_QUESTION_FLAG_SQL)
+        .bind(client_id)
+        .bind(exam_id)
+        .bind(qid)
+        .execute(pool)
+        .await?;
+
+    Ok(FlagQuestionResponse {
+        question_id: qid.to_string(),
+        is_flagged: false,
+    })
+}
+
+/// Deletes a client's submitted answer for a single question so it returns to unanswered state.
+pub async fn reset_question_answer(
+    pool: &PgPool,
+    exam_id: &str,
+    client_id: &str,
+    question_id: &str,
+) -> Result<ResetQuestionResponse, AppError> {
+    let qid = question_id.trim();
+    sqlx::query(
+        "DELETE FROM client_answers WHERE client_id = $1 AND exam_id = $2 AND question_id = $3",
+    )
+    .bind(client_id)
+    .bind(exam_id)
+    .bind(qid)
+    .execute(pool)
+    .await?;
+
+    Ok(ResetQuestionResponse {
+        question_id: qid.to_string(),
+        reset: true,
+    })
+}
+
+/// Clears all submitted answers, progress, and review flags for a client in an exam.
+pub async fn reset_exam_progress(
+    pool: &PgPool,
+    exam_id: &str,
+    client_id: &str,
+) -> Result<ResetExamResponse, AppError> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query("DELETE FROM client_answers WHERE client_id = $1 AND exam_id = $2")
+        .bind(client_id)
+        .bind(exam_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM client_exam_progress WHERE client_id = $1 AND exam_id = $2")
+        .bind(client_id)
+        .bind(exam_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM client_question_flags WHERE client_id = $1 AND exam_id = $2")
+        .bind(client_id)
+        .bind(exam_id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+
+    Ok(ResetExamResponse {
+        exam_id: exam_id.to_string(),
+        reset: true,
     })
 }
 
@@ -732,4 +1140,184 @@ pub async fn sync_client_id(
     Ok(ClientInfoResponse {
         client_id: target_client_id.to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn grades_single_choice() {
+        let spec = json!({
+            "options": [
+                { "id": "a", "label": "A", "text": "Yes" },
+                { "id": "b", "label": "B", "text": "No" }
+            ]
+        });
+        let key = AnswerValue::Choice(vec!["b".to_string()]);
+
+        let (_, pts, ok) = grade_answer(
+            "q1",
+            QuestionType::SingleChoice,
+            &spec,
+            Some(&key),
+            1,
+            &AnswerValue::Choice(vec!["b".to_string()]),
+        )
+        .expect("valid single choice");
+        assert_eq!((pts, ok), (1, true));
+
+        let (_, pts, ok) = grade_answer(
+            "q1",
+            QuestionType::SingleChoice,
+            &spec,
+            Some(&key),
+            1,
+            &AnswerValue::Choice(vec!["a".to_string()]),
+        )
+        .expect("wrong single choice");
+        assert_eq!((pts, ok), (0, false));
+    }
+
+    #[test]
+    fn grades_multiple_choice_with_partial_credit() {
+        let spec = json!({
+            "options": [
+                { "id": "a", "label": "A", "text": "A" },
+                { "id": "b", "label": "B", "text": "B" },
+                { "id": "c", "label": "C", "text": "C" },
+                { "id": "d", "label": "D", "text": "D" }
+            ],
+            "requiredCount": 2
+        });
+        let key = AnswerValue::Choice(vec!["b".to_string(), "d".to_string()]);
+
+        let (_, pts, ok) = grade_answer(
+            "q2",
+            QuestionType::MultipleChoice,
+            &spec,
+            Some(&key),
+            2,
+            &AnswerValue::Choice(vec!["a".to_string(), "b".to_string()]),
+        )
+        .expect("partial credit");
+        assert_eq!((pts, ok), (1, false));
+
+        let (_, pts, ok) = grade_answer(
+            "q2",
+            QuestionType::MultipleChoice,
+            &spec,
+            Some(&key),
+            2,
+            &AnswerValue::Choice(vec!["d".to_string(), "b".to_string()]),
+        )
+        .expect("full credit");
+        assert_eq!((pts, ok), (2, true));
+    }
+
+    #[test]
+    fn grades_hotspot_and_rejects_invalid_choice() {
+        let spec = json!({
+            "mode": "dropdown",
+            "slots": [
+                { "id": "s1", "label": "Slot 1", "choices": [{ "id": "c1", "text": "W1" }, { "id": "c2", "text": "W2" }] },
+                { "id": "s2", "label": "Slot 2", "choices": [{ "id": "c1", "text": "PO" }, { "id": "c2", "text": "TO" }] }
+            ]
+        });
+        let key = AnswerValue::Mapping(BTreeMap::from([
+            ("s1".to_string(), "c1".to_string()),
+            ("s2".to_string(), "c2".to_string()),
+        ]));
+
+        let (_, pts, ok) = grade_answer(
+            "q3",
+            QuestionType::Hotspot,
+            &spec,
+            Some(&key),
+            2,
+            &AnswerValue::Mapping(BTreeMap::from([
+                ("s1".to_string(), "c1".to_string()),
+                ("s2".to_string(), "c1".to_string()),
+            ])),
+        )
+        .expect("partial hotspot");
+        assert_eq!((pts, ok), (1, false));
+
+        let err = grade_answer(
+            "q3",
+            QuestionType::Hotspot,
+            &spec,
+            Some(&key),
+            2,
+            &AnswerValue::Mapping(BTreeMap::from([
+                ("s1".to_string(), "bad".to_string()),
+                ("s2".to_string(), "c2".to_string()),
+            ])),
+        )
+        .expect_err("invalid choice");
+        assert!(matches!(err, AppError::BadRequest(_)));
+    }
+
+    #[test]
+    fn grades_drag_drop_and_enforces_non_reusable() {
+        let spec = json!({
+            "mode": "sequence",
+            "reusable": false,
+            "pool": [
+                { "id": "p1", "text": "Step 1" },
+                { "id": "p2", "text": "Step 2" }
+            ],
+            "targets": [
+                { "id": "t1", "label": "1" },
+                { "id": "t2", "label": "2" }
+            ]
+        });
+        let key = AnswerValue::Mapping(BTreeMap::from([
+            ("t1".to_string(), "p1".to_string()),
+            ("t2".to_string(), "p2".to_string()),
+        ]));
+
+        let err = grade_answer(
+            "q4",
+            QuestionType::DragDrop,
+            &spec,
+            Some(&key),
+            2,
+            &AnswerValue::Mapping(BTreeMap::from([
+                ("t1".to_string(), "p1".to_string()),
+                ("t2".to_string(), "p1".to_string()),
+            ])),
+        )
+        .expect_err("duplicate pool item");
+        assert!(matches!(err, AppError::BadRequest(_)));
+
+        let (_, pts, ok) = grade_answer(
+            "q4",
+            QuestionType::DragDrop,
+            &spec,
+            Some(&key),
+            2,
+            &AnswerValue::Mapping(BTreeMap::from([
+                ("t1".to_string(), "p1".to_string()),
+                ("t2".to_string(), "p2".to_string()),
+            ])),
+        )
+        .expect("valid drag drop");
+        assert_eq!((pts, ok), (2, true));
+    }
+
+    #[test]
+    fn rejects_simulation_submission() {
+        let err = grade_answer(
+            "q5",
+            QuestionType::Simulation,
+            &json!({}),
+            None,
+            0,
+            &AnswerValue::Choice(vec!["a".to_string()]),
+        )
+        .expect_err("simulation rejected");
+        assert!(matches!(err, AppError::BadRequest(_)));
+    }
 }

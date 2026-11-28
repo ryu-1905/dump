@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { getExamOverview } from '#lib/api/exams';
+	import { getExamOverview, resetExamProgress } from '#lib/api/exams';
 	import { headerState } from '#lib/state/header.svelte';
 	import type { ExamDetail, ExamTopic } from '#lib/types/exam';
 
@@ -10,6 +10,7 @@
 
 	let exam = $state<ExamDetail | null>(null);
 	let loading = $state(true);
+	let resetting = $state(false);
 	let error = $state<string | null>(null);
 
 	let resumeIndex = $derived(
@@ -41,6 +42,20 @@
 			error = err instanceof Error ? err.message : 'Failed to load exam';
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function handleResetExam() {
+		if (!examId || resetting) return;
+		resetting = true;
+		error = null;
+		try {
+			await resetExamProgress(examId);
+			await loadOverview(examId);
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to reset exam progress';
+		} finally {
+			resetting = false;
 		}
 	}
 
@@ -149,6 +164,17 @@
 						>
 							Start Practice
 						</a>
+					{/if}
+
+					{#if exam.answeredCount > 0 || exam.lastQuestionIndex !== null}
+						<button
+							type="button"
+							disabled={resetting}
+							onclick={() => void handleResetExam()}
+							class="rounded-lg border border-border bg-bg px-4 py-2.5 text-sm font-medium text-text-muted transition-colors hover:border-red-500/40 hover:text-red-300 disabled:opacity-50"
+						>
+							{resetting ? 'Resetting...' : 'Reset progress'}
+						</button>
 					{/if}
 				</div>
 				<!-- eslint-enable svelte/no-navigation-without-resolve -->
