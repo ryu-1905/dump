@@ -14,6 +14,8 @@
 	import CaseStudyPanel from '#lib/components/practice/CaseStudyPanel.svelte';
 	import DragDropQuestion from '#lib/components/practice/DragDropQuestion.svelte';
 	import HotspotQuestion from '#lib/components/practice/HotspotQuestion.svelte';
+	import QuestionNotesCard from '#lib/components/practice/QuestionNotesCard.svelte';
+	import RichHtml from '#lib/components/practice/RichHtml.svelte';
 	import { headerState } from '#lib/state/header.svelte';
 	import type {
 		AnswerValue,
@@ -60,6 +62,7 @@
 	let resettingQuestion = $state(false);
 	let resettingExam = $state(false);
 	let flagging = $state(false);
+	let showNavigator = $state(false);
 	let error = $state<string | null>(null);
 
 	let activeTopic = $derived(
@@ -353,6 +356,12 @@
 	});
 </script>
 
+<svelte:window
+	onkeydown={(e: KeyboardEvent) => {
+		if (e.key === 'Escape' && showNavigator) showNavigator = false;
+	}}
+/>
+
 <section class="space-y-6">
 	<!-- Top Navigation -->
 	<div class="flex flex-wrap items-center justify-between gap-3">
@@ -381,6 +390,22 @@
 						{resettingExam ? 'Resetting...' : 'Reset exam'}
 					</button>
 				{/if}
+				<button
+					type="button"
+					onclick={() => (showNavigator = !showNavigator)}
+					class={[
+						'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-medium transition-colors',
+						showNavigator
+							? 'border-accent bg-accent/15 text-accent'
+							: 'border-border bg-surface text-text hover:bg-surface-hover'
+					]}
+				>
+					<span>☰</span>
+					<span>Questions ({totalInScope})</span>
+					{#if flaggedCount > 0}
+						<span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
+					{/if}
+				</button>
 			</div>
 		{/if}
 	</div>
@@ -427,14 +452,13 @@
 			</div>
 		{/if}
 
-		<div class="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
-			<div class="space-y-5">
-				{#if currentCaseStudy}
-					<CaseStudyPanel caseStudy={currentCaseStudy} showVi={headerState.showVi} />
-				{/if}
+		<div class="space-y-5">
+			{#if currentCaseStudy}
+				<CaseStudyPanel caseStudy={currentCaseStudy} showVi={headerState.showVi} />
+			{/if}
 
-				<!-- Question Card -->
-				<div class="space-y-5 rounded-xl border border-border bg-surface p-6">
+			<!-- Question Card -->
+			<div class="space-y-5 rounded-xl border border-border bg-surface p-6">
 				<div class="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
 					<div class="flex flex-wrap items-center gap-2.5">
 						<span class="text-xs font-semibold tracking-wide text-accent uppercase">
@@ -463,15 +487,15 @@
 					</button>
 				</div>
 
-				<p class="text-sm leading-relaxed whitespace-pre-line text-text sm:text-base">
-					{currentQuestion.prompt}
-				</p>
+				<RichHtml
+					html={currentQuestion.prompt}
+					class="text-sm leading-relaxed text-text sm:text-base"
+				/>
 				{#if headerState.showVi && currentQuestion.promptVi}
-					<p
-						class="rounded-lg border border-accent/20 bg-accent/5 px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-line text-accent/90"
-					>
-						{currentQuestion.promptVi}
-					</p>
+					<RichHtml
+						html={currentQuestion.promptVi}
+						class="rounded-lg border border-accent/20 bg-accent/5 px-3.5 py-2.5 text-sm leading-relaxed text-accent/90"
+					/>
 				{/if}
 
 				<!-- Question Body by Type -->
@@ -511,9 +535,9 @@
 									{option.label}
 								</span>
 								<div class="pt-0.5 leading-snug">
-									<p>{option.text}</p>
+									<RichHtml html={option.text} inline class="block" />
 									{#if headerState.showVi && option.textVi}
-										<p class="mt-1 text-xs text-accent/90">{option.textVi}</p>
+										<RichHtml html={option.textVi} inline class="mt-1 block text-xs text-accent/90" />
 									{/if}
 								</div>
 							</button>
@@ -636,11 +660,9 @@
 								pts)
 							{/if}
 						</p>
-						<p class="mt-1 whitespace-pre-line text-text">{currentQuestion.explanation}</p>
+						<RichHtml html={currentQuestion.explanation} class="mt-1 text-text" />
 						{#if headerState.showVi && currentQuestion.explanationVi}
-							<p class="mt-1.5 whitespace-pre-line text-accent/90">
-								{currentQuestion.explanationVi}
-							</p>
+							<RichHtml html={currentQuestion.explanationVi} class="mt-1.5 text-accent/90" />
 						{/if}
 						{#if currentQuestion.keywords && currentQuestion.keywords.length > 0}
 							<div class="mt-3 border-t border-border/60 pt-2.5">
@@ -686,15 +708,34 @@
 						Next
 					</button>
 				</div>
-				</div>
 			</div>
 
-			<!-- Question Navigator -->
-			<aside class="h-fit space-y-3 rounded-xl border border-border bg-surface p-4">
-				<div class="flex items-center justify-between">
-					<h2 class="text-xs font-semibold tracking-wide text-text-muted uppercase">
+			<QuestionNotesCard {examId} questionId={currentQuestion.id} />
+		</div>
+
+		<!-- Collapsible Question Navigator Drawer -->
+		{#if showNavigator}
+			<div
+				role="presentation"
+				onclick={() => (showNavigator = false)}
+				class="fixed inset-0 z-40 bg-black/50"
+			></div>
+			<aside
+				aria-label="Question navigator"
+				class="fixed top-0 right-0 z-50 flex h-full w-80 max-w-[90vw] flex-col gap-4 border-l border-border bg-surface p-5 shadow-2xl"
+			>
+				<div class="flex items-center justify-between border-b border-border pb-3">
+					<h2 class="text-xs font-semibold tracking-wide text-text uppercase">
 						Questions ({totalInScope})
 					</h2>
+					<button
+						type="button"
+						onclick={() => (showNavigator = false)}
+						class="rounded-md border border-border bg-bg px-2 py-1 text-xs text-text-muted hover:text-text"
+						aria-label="Close navigator"
+					>
+						✕
+					</button>
 				</div>
 
 				<div class="grid grid-cols-3 gap-1 rounded-lg border border-border bg-bg p-1 text-[11px]">
@@ -734,14 +775,17 @@
 					</button>
 				</div>
 
-				<div class="grid max-h-96 grid-cols-5 gap-1.5 overflow-y-auto pr-1">
+				<div class="grid flex-1 grid-cols-5 content-start gap-1.5 overflow-y-auto pr-1">
 					{#each navItems as item (item.index)}
 						{@const isCurrent = item.index === currentIndex}
 						<button
 							type="button"
-							onclick={() => void goToQuestion(item.index)}
+							onclick={() => {
+								showNavigator = false;
+								void goToQuestion(item.index);
+							}}
 							class={[
-								'relative flex h-8 items-center justify-center rounded-md border text-xs font-medium transition-colors',
+								'relative flex h-9 items-center justify-center rounded-md border text-xs font-medium transition-colors',
 								isCurrent
 									? 'border-accent bg-accent text-white'
 									: item.status === 'correct'
@@ -762,6 +806,6 @@
 					{/each}
 				</div>
 			</aside>
-		</div>
+		{/if}
 	{/if}
 </section>

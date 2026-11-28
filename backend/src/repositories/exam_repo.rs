@@ -6,12 +6,12 @@ use sqlx::{FromRow, PgPool, types::Json};
 use crate::{
     error::AppError,
     models::exam::{
-        AnswerValue, CaseStudy, CaseStudySection, ChoiceSpec, ClientInfoResponse, DragDropSpec,
-        ExamAnswerRecord, ExamDetail, ExamQuestion, ExamQuestionPayload, ExamSummary, ExamTopic,
-        FlagQuestionRequest, FlagQuestionResponse, HotspotSpec, NormalizedExamListParams,
-        PaginatedExamsResponse, QuestionFilter, QuestionImage, QuestionNavItem,
-        QuestionNavStatus, QuestionType, ResetExamResponse, ResetQuestionResponse,
-        SubmitAnswerRequest,
+        AnswerValue, CaseStudy, CaseStudySection, ChoiceSpec, ClientInfoResponse,
+        DeleteQuestionNoteResponse, DragDropSpec, ExamAnswerRecord, ExamDetail, ExamQuestion,
+        ExamQuestionPayload, ExamSummary, ExamTopic, FlagQuestionRequest, FlagQuestionResponse,
+        HotspotSpec, NormalizedExamListParams, PaginatedExamsResponse, QuestionFilter,
+        QuestionImage, QuestionNavItem, QuestionNavStatus, QuestionNote, QuestionType,
+        ResetExamResponse, ResetQuestionResponse, SubmitAnswerRequest, VoteNoteResponse,
     },
 };
 
@@ -977,6 +977,401 @@ pub async fn reset_exam_progress(
     })
 }
 
+const LIST_QUESTION_NOTES_SQL: &str = r#"
+SELECT
+    n.id,
+    n.question_id,
+    n.parent_id,
+    n.client_id,
+    n.content,
+    TO_CHAR(n.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+    TO_CHAR(n.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at,
+    COALESCE(COUNT(*) FILTER (WHERE v.vote = 1), 0)::bigint AS upvotes,
+    COALESCE(COUNT(*) FILTER (WHERE v.vote = -1), 0)::bigint AS downvotes,
+    COALESCE(SUM(v.vote), 0)::bigint AS score,
+    COALESCE(
+        MAX(CASE WHEN $3::text IS NOT NULL AND v.client_id = $3::text THEN v.vote END),
+        0
+    )::smallint AS my_vote
+FROM question_notes n
+LEFT JOIN question_note_votes v ON v.note_id = n.id
+WHERE n.exam_id = $1 AND n.question_id = $2
+GROUP BY n.id
+ORDER BY score DESC, n.created_at DESC, n.id DESC
+"#;
+
+const GET_NOTE_VOTE_COUNTS_SQL: &str = r#"
+SELECT
+    COALESCE(COUNT(*) FILTER (WHERE vote = 1), 0)::bigint AS upvotes,
+    COALESCE(COUNT(*) FILTER (WHERE vote = -1), 0)::bigint AS downvotes,
+    COALESCE(SUM(vote), 0)::bigint AS score,
+    COALESCE(
+        MAX(CASE WHEN $2::text IS NOT NULL AND client_id = $2::text THEN vote END),
+        0
+    )::smallint AS my_vote
+FROM question_note_votes
+WHERE note_id = $1
+"#;
+
+const CHECK_NOTE_EXISTS_SQL: &str = r#"
+SELECT EXISTS(
+    SELECT 1 FROM question_notes
+    WHERE id = $1 AND exam_id = $2 AND question_id = $3
+)
+"#;
+
+const UPSERT_NOTE_VOTE_SQL: &str = r#"
+INSERT INTO question_note_votes (note_id, client_id, vote, updated_at)
+VALUES ($1, $2, $3, NOW())
+ON CONFLICT (note_id, client_id) DO UPDATE SET
+    vote = EXCLUDED.vote,
+    updated_at = NOW()
+"#;
+
+const DELETE_NOTE_VOTE_SQL: &str = r#"
+DELETE FROM question_note_votes
+WHERE note_id = $1 AND client_id = $2
+"#;
+
+const CHECK_PARENT_NOTE_SQL: &str = r#"
+SELECT parent_id
+FROM question_notes
+WHERE id = $1 AND exam_id = $2 AND question_id = $3
+"#;
+
+const INSERT_QUESTION_NOTE_SQL: &str = r#"
+INSERT INTO question_notes (exam_id, question_id, parent_id, client_id, content)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING
+    id,
+    question_id,
+    parent_id,
+    client_id,
+    content,
+    TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+    TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+"#;
+
+const UPDATE_QUESTION_NOTE_SQL: &str = r#"
+UPDATE question_notes
+SET content = $1, updated_at = NOW()
+WHERE id = $2 AND exam_id = $3 AND question_id = $4 AND client_id = $5
+RETURNING
+    id,
+    question_id,
+    parent_id,
+    client_id,
+    content,
+    TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+    TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+"#;
+
+const DELETE_QUESTION_NOTE_SQL: &str = r#"
+DELETE FROM question_notes
+WHERE id = $1 AND exam_id = $2 AND question_id = $3 AND client_id = $4
+"#;
+
+#[derive(Debug, FromRow)]
+struct QuestionNoteListRow {
+    id: i64,
+    question_id: String,
+    parent_id: Option<i64>,
+    client_id: String,
+    content: String,
+    created_at: String,
+    updated_at: String,
+    upvotes: i64,
+    downvotes: i64,
+    score: i64,
+    my_vote: i16,
+}
+
+#[derive(Debug, FromRow)]
+struct QuestionNoteRow {
+    id: i64,
+    question_id: String,
+    parent_id: Option<i64>,
+    client_id: String,
+    content: String,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Debug, FromRow)]
+struct NoteVoteCountsRow {
+    upvotes: i64,
+    downvotes: i64,
+    score: i64,
+    my_vote: i16,
+}
+
+fn validate_note_content(raw: &str) -> Result<String, AppError> {
+    let trimmed = raw.trim();
+    let len = trimmed.chars().count();
+    if len == 0 || len > 2000 {
+        return Err(AppError::BadRequest(
+            "note content must be between 1 and 2000 characters".to_string(),
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// Lists all users' notes for a given question sorted by vote score, marking notes owned by `current_client_id`.
+pub async fn list_question_notes(
+    pool: &PgPool,
+    exam_id: &str,
+    question_id: &str,
+    current_client_id: Option<&str>,
+) -> Result<Vec<QuestionNote>, AppError> {
+    let qid = question_id.trim();
+    let rows: Vec<QuestionNoteListRow> = sqlx::query_as(LIST_QUESTION_NOTES_SQL)
+        .bind(exam_id)
+        .bind(qid)
+        .bind(current_client_id)
+        .fetch_all(pool)
+        .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| QuestionNote {
+            is_owner: current_client_id.is_some_and(|cid| cid == row.client_id),
+            id: row.id,
+            question_id: row.question_id,
+            parent_id: row.parent_id,
+            client_id: row.client_id,
+            content: row.content,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            upvotes: row.upvotes,
+            downvotes: row.downvotes,
+            score: row.score,
+            my_vote: row.my_vote,
+        })
+        .collect())
+}
+
+/// Creates a new note (or 1-level reply when `parent_id` is provided) on a question for `client_id`.
+pub async fn create_question_note(
+    pool: &PgPool,
+    exam_id: &str,
+    question_id: &str,
+    client_id: &str,
+    raw_content: &str,
+    parent_id: Option<i64>,
+) -> Result<QuestionNote, AppError> {
+    let qid = question_id.trim();
+    let content = validate_note_content(raw_content)?;
+
+    let exists: Option<i32> = sqlx::query_scalar(GET_QUESTION_INDEX_SQL)
+        .bind(exam_id)
+        .bind(qid)
+        .fetch_optional(pool)
+        .await?;
+    if exists.is_none() {
+        return Err(AppError::NotFound(format!(
+            "question '{qid}' not found in exam '{exam_id}'"
+        )));
+    }
+
+    if let Some(pid) = parent_id {
+        let parent_parent: Option<Option<i64>> = sqlx::query_scalar(CHECK_PARENT_NOTE_SQL)
+            .bind(pid)
+            .bind(exam_id)
+            .bind(qid)
+            .fetch_optional(pool)
+            .await?;
+
+        match parent_parent {
+            None => {
+                return Err(AppError::NotFound(format!(
+                    "parent note '{pid}' not found for question '{qid}'"
+                )));
+            }
+            Some(Some(_)) => {
+                return Err(AppError::BadRequest(
+                    "only 1 level of replies is allowed".to_string(),
+                ));
+            }
+            Some(None) => {}
+        }
+    }
+
+    let mut tx = pool.begin().await?;
+    sqlx::query(ENSURE_CLIENT_SQL)
+        .bind(client_id)
+        .execute(&mut *tx)
+        .await?;
+
+    let row: QuestionNoteRow = sqlx::query_as(INSERT_QUESTION_NOTE_SQL)
+        .bind(exam_id)
+        .bind(qid)
+        .bind(parent_id)
+        .bind(client_id)
+        .bind(&content)
+        .fetch_one(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+
+    Ok(QuestionNote {
+        id: row.id,
+        question_id: row.question_id,
+        parent_id: row.parent_id,
+        client_id: row.client_id,
+        content: row.content,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        is_owner: true,
+        upvotes: 0,
+        downvotes: 0,
+        score: 0,
+        my_vote: 0,
+    })
+}
+
+/// Updates an existing note owned by `client_id`.
+pub async fn update_question_note(
+    pool: &PgPool,
+    exam_id: &str,
+    question_id: &str,
+    note_id: i64,
+    client_id: &str,
+    raw_content: &str,
+) -> Result<QuestionNote, AppError> {
+    let qid = question_id.trim();
+    let content = validate_note_content(raw_content)?;
+
+    let row: QuestionNoteRow = sqlx::query_as(UPDATE_QUESTION_NOTE_SQL)
+        .bind(&content)
+        .bind(note_id)
+        .bind(exam_id)
+        .bind(qid)
+        .bind(client_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| {
+            AppError::NotFound(format!(
+                "note '{note_id}' not found or not owned by client"
+            ))
+        })?;
+
+    let counts: NoteVoteCountsRow = sqlx::query_as(GET_NOTE_VOTE_COUNTS_SQL)
+        .bind(row.id)
+        .bind(Some(client_id))
+        .fetch_one(pool)
+        .await?;
+
+    Ok(QuestionNote {
+        id: row.id,
+        question_id: row.question_id,
+        parent_id: row.parent_id,
+        client_id: row.client_id,
+        content: row.content,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        is_owner: true,
+        upvotes: counts.upvotes,
+        downvotes: counts.downvotes,
+        score: counts.score,
+        my_vote: counts.my_vote,
+    })
+}
+
+/// Sets or clears a client's upvote (`1`), downvote (`-1`), or unvote (`0`) on a question note.
+pub async fn vote_question_note(
+    pool: &PgPool,
+    exam_id: &str,
+    question_id: &str,
+    note_id: i64,
+    client_id: &str,
+    vote: i16,
+) -> Result<VoteNoteResponse, AppError> {
+    if !(-1..=1).contains(&vote) {
+        return Err(AppError::BadRequest(
+            "vote must be -1, 0, or 1".to_string(),
+        ));
+    }
+
+    let qid = question_id.trim();
+    let exists: bool = sqlx::query_scalar(CHECK_NOTE_EXISTS_SQL)
+        .bind(note_id)
+        .bind(exam_id)
+        .bind(qid)
+        .fetch_one(pool)
+        .await?;
+    if !exists {
+        return Err(AppError::NotFound(format!(
+            "note '{note_id}' not found for question '{qid}'"
+        )));
+    }
+
+    let mut tx = pool.begin().await?;
+    sqlx::query(ENSURE_CLIENT_SQL)
+        .bind(client_id)
+        .execute(&mut *tx)
+        .await?;
+
+    if vote == 0 {
+        sqlx::query(DELETE_NOTE_VOTE_SQL)
+            .bind(note_id)
+            .bind(client_id)
+            .execute(&mut *tx)
+            .await?;
+    } else {
+        sqlx::query(UPSERT_NOTE_VOTE_SQL)
+            .bind(note_id)
+            .bind(client_id)
+            .bind(vote)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    let counts: NoteVoteCountsRow = sqlx::query_as(GET_NOTE_VOTE_COUNTS_SQL)
+        .bind(note_id)
+        .bind(Some(client_id))
+        .fetch_one(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+
+    Ok(VoteNoteResponse {
+        note_id,
+        upvotes: counts.upvotes,
+        downvotes: counts.downvotes,
+        score: counts.score,
+        my_vote: counts.my_vote,
+    })
+}
+
+/// Deletes an existing note owned by `client_id`.
+pub async fn delete_question_note(
+    pool: &PgPool,
+    exam_id: &str,
+    question_id: &str,
+    note_id: i64,
+    client_id: &str,
+) -> Result<DeleteQuestionNoteResponse, AppError> {
+    let qid = question_id.trim();
+    let result = sqlx::query(DELETE_QUESTION_NOTE_SQL)
+        .bind(note_id)
+        .bind(exam_id)
+        .bind(qid)
+        .bind(client_id)
+        .execute(pool)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound(format!(
+            "note '{note_id}' not found or not owned by client"
+        )));
+    }
+
+    Ok(DeleteQuestionNoteResponse {
+        id: note_id,
+        deleted: true,
+    })
+}
+
 const ENSURE_CLIENT_SQL: &str = r#"
 INSERT INTO clients (id)
 VALUES ($1)
@@ -1129,6 +1524,24 @@ pub async fn sync_client_id(
     if let Some(current_id) = current_client_id
         && current_id != target_client_id
     {
+        sqlx::query("UPDATE question_notes SET client_id = $2 WHERE client_id = $1")
+            .bind(current_id)
+            .bind(target_client_id)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query(
+            "INSERT INTO question_note_votes (note_id, client_id, vote, updated_at)
+             SELECT note_id, $2, vote, updated_at
+             FROM question_note_votes
+             WHERE client_id = $1
+             ON CONFLICT (note_id, client_id) DO NOTHING",
+        )
+        .bind(current_id)
+        .bind(target_client_id)
+        .execute(&mut *tx)
+        .await?;
+
         sqlx::query("DELETE FROM clients WHERE id = $1")
             .bind(current_id)
             .execute(&mut *tx)

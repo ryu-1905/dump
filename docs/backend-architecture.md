@@ -29,7 +29,10 @@ backend/
 │   ├── 20261127151306_add_show_answer_by_default.sql
 │   ├── 20261127163324_drop_best_score_percent.sql
 │   ├── 20261128043957_add_clients_table.sql
-│   └── 20261128073500_v2_microsoft_exam_schema.sql
+│   ├── 20261128073500_v2_microsoft_exam_schema.sql
+│   ├── 20261128093000_add_question_notes.sql
+│   ├── 20261128100000_add_question_note_votes.sql
+│   └── 20261128103000_add_question_note_replies.sql
 ├── seeds/                                          # Idempotent seed SQL scripts
 │   └── 001_mb330_20q.sql
 └── src/

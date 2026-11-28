@@ -15,9 +15,13 @@ erDiagram
     exams ||--o{ client_exam_progress : tracks
     questions ||--o{ client_answers : answered_by
     questions ||--o{ client_question_flags : flagged_by
+    questions ||--o{ question_notes : annotated_by
     clients ||--o{ client_exam_progress : owns
     clients ||--o{ client_answers : submits
     clients ||--o{ client_question_flags : marks
+    clients ||--o{ question_notes : writes
+    question_notes ||--o{ question_note_votes : receives
+    clients ||--o{ question_note_votes : casts
 
     clients {
         text id PK
@@ -98,6 +102,24 @@ erDiagram
         int question_index
         timestamptz flagged_at
     }
+
+    question_notes {
+        bigint id PK
+        text exam_id FK
+        text question_id FK
+        bigint parent_id FK
+        text client_id FK
+        text content
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    question_note_votes {
+        bigint note_id PK,FK
+        text client_id PK,FK
+        smallint vote
+        timestamptz updated_at
+    }
 ```
 
 ### Table Relationship Overview (Text Diagram)
@@ -112,12 +134,14 @@ exams (id PK)
 
 questions (UNIQUE: exam_id, id)
  ├──< client_answers (PK: client_id, question_id | FK: (exam_id, question_id) -> questions)
- └──< client_question_flags (PK: client_id, question_id | FK: (exam_id, question_id) -> questions)
+ ├──< client_question_flags (PK: client_id, question_id | FK: (exam_id, question_id) -> questions)
+ └──< question_notes (id PK | FK: (exam_id, question_id) -> questions, client_id -> clients.id)
 
 clients (id PK)
  ├──< client_exam_progress (ON UPDATE CASCADE, ON DELETE CASCADE)
  ├──< client_answers (ON UPDATE CASCADE, ON DELETE CASCADE)
- └──< client_question_flags (ON UPDATE CASCADE, ON DELETE CASCADE)
+ ├──< client_question_flags (ON UPDATE CASCADE, ON DELETE CASCADE)
+ └──< question_notes (ON UPDATE CASCADE, ON DELETE CASCADE)
 ```
 
 ---
@@ -162,6 +186,10 @@ clients (id PK)
 | `client_answers` | `idx_client_answers_nav (client_id, exam_id, question_index) INCLUDE (is_correct, earned_points, max_points)` | **Covering Index (Index-Only Scan):** Loads navigator & review summary without heap fetches |
 | `client_answers` | `idx_client_answers_wrong (client_id, exam_id, question_index) WHERE is_correct = FALSE` | **Partial Index:** Fast "review incorrect answers" mode |
 | `client_question_flags` | `idx_client_flags_nav (client_id, exam_id, question_index)` | Fast lookup of flagged ("Mark for review") questions |
+| `question_notes` | `idx_question_notes_question_created (exam_id, question_id, created_at DESC, id DESC)` | Fast chronological listing of all users' notes per question |
+| `question_notes` | `idx_question_notes_client (client_id)` | Cascade updates/deletes when renaming or syncing a client ID |
+| `question_notes` | `idx_question_notes_parent (parent_id) WHERE parent_id IS NOT NULL` | **Partial Index:** Fast lookup of 1-level replies per parent note |
+| `question_note_votes` | `idx_question_note_votes_client (client_id)` | Cascade updates/deletes when renaming or syncing a client ID |
 
 ---
 

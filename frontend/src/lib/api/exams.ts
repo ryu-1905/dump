@@ -1,15 +1,21 @@
 import { apiRequest, USE_MOCK_API } from '#lib/api/client';
 import {
+	mockCreateQuestionNote,
+	mockDeleteQuestionNote,
 	mockFlagQuestion,
 	mockGetExamOverview,
 	mockGetExamQuestion,
 	mockListExams,
+	mockListQuestionNotes,
 	mockResetExamProgress,
 	mockResetQuestionAnswer,
 	mockSubmitAnswer,
-	mockUnflagQuestion
+	mockUnflagQuestion,
+	mockUpdateQuestionNote,
+	mockVoteQuestionNote
 } from '#lib/mocks/exams';
 import type {
+	DeleteQuestionNoteResponse,
 	ExamAnswerRecord,
 	ExamDetail,
 	ExamListParams,
@@ -18,9 +24,11 @@ import type {
 	FlagQuestionResponse,
 	PaginatedExamsResponse,
 	QuestionFilter,
+	QuestionNote,
 	ResetExamResponse,
 	ResetQuestionResponse,
-	SubmitAnswerRequest
+	SubmitAnswerRequest,
+	VoteNoteResponse
 } from '#lib/types/exam';
 import { getClientId } from '#lib/utils/client-id';
 
@@ -152,6 +160,98 @@ export async function resetExamProgress(examId: string): Promise<ResetExamRespon
 	return apiRequest<ResetExamResponse>(`/exams/${encodeURIComponent(examId)}/answers`, {
 		method: 'DELETE'
 	});
+}
+
+export async function listQuestionNotes(
+	examId: string,
+	questionId: string
+): Promise<QuestionNote[]> {
+	getClientId();
+
+	if (USE_MOCK_API) {
+		return mockListQuestionNotes(examId, questionId);
+	}
+	return apiRequest<QuestionNote[]>(
+		`/exams/${encodeURIComponent(examId)}/questions/${encodeURIComponent(questionId)}/notes`
+	);
+}
+
+export async function createQuestionNote(
+	examId: string,
+	questionId: string,
+	content: string,
+	parentId?: number | null
+): Promise<QuestionNote> {
+	getClientId();
+
+	if (USE_MOCK_API) {
+		return mockCreateQuestionNote(examId, questionId, content, parentId);
+	}
+	return apiRequest<QuestionNote>(
+		`/exams/${encodeURIComponent(examId)}/questions/${encodeURIComponent(questionId)}/notes`,
+		{
+			method: 'POST',
+			body: JSON.stringify(parentId ? { content, parentId } : { content })
+		}
+	);
+}
+
+export async function updateQuestionNote(
+	examId: string,
+	questionId: string,
+	noteId: number,
+	content: string
+): Promise<QuestionNote> {
+	getClientId();
+
+	if (USE_MOCK_API) {
+		return mockUpdateQuestionNote(examId, questionId, noteId, content);
+	}
+	return apiRequest<QuestionNote>(
+		`/exams/${encodeURIComponent(examId)}/questions/${encodeURIComponent(questionId)}/notes/${noteId}`,
+		{
+			method: 'PUT',
+			body: JSON.stringify({ content })
+		}
+	);
+}
+
+export async function deleteQuestionNote(
+	examId: string,
+	questionId: string,
+	noteId: number
+): Promise<DeleteQuestionNoteResponse> {
+	getClientId();
+
+	if (USE_MOCK_API) {
+		return mockDeleteQuestionNote(examId, questionId, noteId);
+	}
+	return apiRequest<DeleteQuestionNoteResponse>(
+		`/exams/${encodeURIComponent(examId)}/questions/${encodeURIComponent(questionId)}/notes/${noteId}`,
+		{
+			method: 'DELETE'
+		}
+	);
+}
+
+export async function voteQuestionNote(
+	examId: string,
+	questionId: string,
+	noteId: number,
+	vote: -1 | 0 | 1
+): Promise<VoteNoteResponse> {
+	getClientId();
+
+	if (USE_MOCK_API) {
+		return mockVoteQuestionNote(examId, questionId, noteId, vote);
+	}
+	return apiRequest<VoteNoteResponse>(
+		`/exams/${encodeURIComponent(examId)}/questions/${encodeURIComponent(questionId)}/notes/${noteId}/vote`,
+		{
+			method: 'PUT',
+			body: JSON.stringify({ vote })
+		}
+	);
 }
 
 export interface ClientInfoResponse {

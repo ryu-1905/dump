@@ -130,7 +130,7 @@
 </script>
 
 <svelte:window
-	onkeydown={(e) => {
+	onkeydown={(e: KeyboardEvent) => {
 		if (modalOpen && e.key === 'Escape') {
 			closeClientModal();
 		}
@@ -179,15 +179,29 @@
 					type="button"
 					onclick={toggleVi}
 					aria-pressed={headerState.showVi}
-					title="Bật/tắt dịch tiếng Việt bên cạnh tiếng Anh"
+					title="Nhấn để bật/tắt dịch tiếng Việt"
 					class={[
-						'rounded-lg border px-2.5 py-1 text-xs font-semibold tracking-wide transition-colors',
+						'inline-flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1 text-xs font-semibold tracking-wide transition-colors',
 						headerState.showVi
-							? 'border-accent/40 bg-accent/15 text-accent'
-							: 'border-border bg-bg text-text-muted hover:bg-surface-hover hover:text-text'
+							? 'border-accent/50 bg-accent/15 text-accent hover:bg-accent/25'
+							: 'border-border bg-bg text-text-muted hover:border-accent/40 hover:bg-surface-hover hover:text-text'
 					]}
 				>
-					VN
+					<span>VN</span>
+					<span
+						aria-hidden="true"
+						class={[
+							'relative inline-flex h-3.5 w-6 items-center rounded-full transition-colors',
+							headerState.showVi ? 'bg-accent' : 'bg-border'
+						]}
+					>
+						<span
+							class={[
+								'inline-block h-2.5 w-2.5 rounded-full bg-white transition-transform',
+								headerState.showVi ? 'translate-x-3' : 'translate-x-0.5'
+							]}
+						></span>
+					</span>
 				</button>
 			{/if}
 
@@ -195,10 +209,30 @@
 				<button
 					type="button"
 					onclick={openClientModal}
-					title={`Client ID: ${clientId}`}
-					class="max-w-28 truncate rounded-lg border border-border bg-bg px-2.5 py-1 font-mono text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-text sm:max-w-40"
+					title={`Client ID: ${clientId} — Nhấn để đổi tên hoặc đồng bộ giữa các thiết bị`}
+					class="inline-flex max-w-36 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-bg px-2.5 py-1 font-mono text-xs text-text-muted transition-colors hover:border-accent/50 hover:bg-surface-hover hover:text-text sm:max-w-48"
 				>
-					{clientId}
+					<svg
+						aria-hidden="true"
+						viewBox="0 0 16 16"
+						fill="currentColor"
+						class="h-3.5 w-3.5 shrink-0 opacity-75"
+					>
+						<path
+							d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-5 6a5 5 0 0 1 10 0 .75.75 0 0 1-.75.75H3.75A.75.75 0 0 1 3 14Z"
+						/>
+					</svg>
+					<span class="truncate">{clientId}</span>
+					<svg
+						aria-hidden="true"
+						viewBox="0 0 16 16"
+						fill="currentColor"
+						class="h-3 w-3 shrink-0 opacity-70"
+					>
+						<path
+							d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086ZM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064l6.286-6.286Z"
+						/>
+					</svg>
 				</button>
 			{/if}
 		</div>
@@ -272,8 +306,8 @@
 				<p
 					class="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-200"
 				>
-					Enter an existing Client ID from another device. Progress under your current browser ID
-					will be deleted and replaced by that ID.
+					Enter an existing Client ID from another device. Exam progress under your current browser
+					ID will be replaced by that ID, while your notes and votes will be kept and moved to it.
 				</p>
 			{/if}
 

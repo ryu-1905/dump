@@ -1,4 +1,5 @@
 <script lang="ts">
+	import RichHtml from '#lib/components/practice/RichHtml.svelte';
 	import type { HotspotSpec } from '#lib/types/exam';
 
 	interface Props {
@@ -46,9 +47,9 @@
 				]}
 			>
 				<div class="min-w-0 flex-1 space-y-1">
-					<p class="text-sm font-medium text-text">{slot.label}</p>
+					<RichHtml html={slot.label} inline class="block text-sm font-medium text-text" />
 					{#if showVi && slot.labelVi}
-						<p class="text-xs text-accent/90">{slot.labelVi}</p>
+						<RichHtml html={slot.labelVi} inline class="block text-xs text-accent/90" />
 					{/if}
 					{#if isSlotWrong && expectedChoice}
 						<p class="text-xs font-medium text-emerald-300">

@@ -1,5 +1,6 @@
 import {
 	getExamStatus,
+	type DeleteQuestionNoteResponse,
 	type ExamAnswerRecord,
 	type ExamDetail,
 	type ExamListParams,
@@ -13,9 +14,11 @@ import {
 	type QuestionFilter,
 	type QuestionNavItem,
 	type QuestionNavStatus,
+	type QuestionNote,
 	type ResetExamResponse,
 	type ResetQuestionResponse,
-	type SubmitAnswerRequest
+	type SubmitAnswerRequest,
+	type VoteNoteResponse
 } from '#lib/types/exam';
 
 const MOCK_EXAMS: ExamSummary[] = [
@@ -790,4 +793,97 @@ export function mockResetExamProgress(examId: string): Promise<ResetExamResponse
 	store[examId] = { lastQuestionIndex: null, answers: {} };
 	writeProgressStore(store);
 	return Promise.resolve({ examId, reset: true });
+}
+
+const mockNotesStore = new Map<string, QuestionNote[]>();
+let mockNextNoteId = 1;
+
+export function mockListQuestionNotes(
+	_examId: string,
+	questionId: string
+): Promise<QuestionNote[]> {
+	return Promise.resolve([...(mockNotesStore.get(questionId) ?? [])]);
+}
+
+export function mockCreateQuestionNote(
+	_examId: string,
+	questionId: string,
+	content: string,
+	parentId?: number | null
+): Promise<QuestionNote> {
+	const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+	const note: QuestionNote = {
+		id: mockNextNoteId++,
+		questionId,
+		parentId: parentId ?? null,
+		clientId: 'local-mock-user',
+		content: content.trim(),
+		createdAt: now,
+		updatedAt: now,
+		isOwner: true,
+		upvotes: 0,
+		downvotes: 0,
+		score: 0,
+		myVote: 0
+	};
+	mockNotesStore.set(questionId, [note, ...(mockNotesStore.get(questionId) ?? [])]);
+	return Promise.resolve(note);
+}
+
+export function mockUpdateQuestionNote(
+	_examId: string,
+	questionId: string,
+	noteId: number,
+	content: string
+): Promise<QuestionNote> {
+	const list = mockNotesStore.get(questionId) ?? [];
+	const idx = list.findIndex((n) => n.id === noteId);
+	if (idx < 0) return Promise.reject(new Error('Note not found'));
+	const updated: QuestionNote = {
+		...list[idx],
+		content: content.trim(),
+		updatedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+	};
+	const next = [...list];
+	next[idx] = updated;
+	mockNotesStore.set(questionId, next);
+	return Promise.resolve(updated);
+}
+
+export function mockDeleteQuestionNote(
+	_examId: string,
+	questionId: string,
+	noteId: number
+): Promise<DeleteQuestionNoteResponse> {
+	const list = mockNotesStore.get(questionId) ?? [];
+	mockNotesStore.set(
+		questionId,
+		list.filter((n) => n.id !== noteId)
+	);
+	return Promise.resolve({ id: noteId, deleted: true });
+}
+
+export function mockVoteQuestionNote(
+	_examId: string,
+	questionId: string,
+	noteId: number,
+	vote: -1 | 0 | 1
+): Promise<VoteNoteResponse> {
+	const list = mockNotesStore.get(questionId) ?? [];
+	const idx = list.findIndex((n) => n.id === noteId);
+	if (idx < 0) return Promise.reject(new Error('Note not found'));
+	const prev = list[idx];
+	const nextUp = prev.upvotes - (prev.myVote === 1 ? 1 : 0) + (vote === 1 ? 1 : 0);
+	const nextDown = prev.downvotes - (prev.myVote === -1 ? 1 : 0) + (vote === -1 ? 1 : 0);
+	const nextScore = nextUp - nextDown;
+	const next = [...list];
+	next[idx] = { ...prev, upvotes: nextUp, downvotes: nextDown, score: nextScore, myVote: vote };
+	mockNotesStore.set(questionId, next);
+	return Promise.resolve({
+		noteId,
+		upvotes: nextUp,
+		downvotes: nextDown,
+		score: nextScore,
+		myVote: vote
+	});
 }
