@@ -1,6 +1,13 @@
 {
   "version": 2,
   "skills": {
+    "git-workflow": {
+      "source": "netresearch/git-workflow-skill",
+      "commit": "1e8c942f0046ef3025ec5b8081600426c16a8e9d",
+      "sourceType": "github",
+      "skillPath": "skills/git-workflow/SKILL.md",
+      "computedHash": "48de181a17394b9a0740621f348130517d5b35e8cb520129e42c8a6ce6564710"
+    },
     "rust-skills": {
       "source": "leonardomso/rust-skills",
       "commit": "0e94a9e517cb2539bfd30694f5d785f610c27374",

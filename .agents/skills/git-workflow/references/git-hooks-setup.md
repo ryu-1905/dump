@@ -1,0 +1,450 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
+# Git Hooks Setup
+
+## Why Hooks Matter
+
+Git hooks catch issues before they reach CI — faster feedback, fewer wasted CI runs.
+For autonomous agents, hooks are essential: they enforce commit message format,
+prevent secrets, and ensure code quality without requiring the agent to "remember" rules.
+
+## Hook Frameworks
+
+| Framework | Language | Config File | Install |
+|-----------|----------|-------------|---------|
+| **lefthook** | Go binary | `lefthook.yml` | `go install github.com/evilmartians/lefthook@latest && lefthook install` |
+| **captainhook** | PHP | `captainhook.json` | `composer install` (auto via `captainhook/hook-installer`) |
+| **husky** | Node.js | `.husky/` | `npm install` (auto via prepare) |
+| **pre-commit** | Python | `.pre-commit-config.yaml` | `pip install pre-commit && pre-commit install` |
+
+## Detection — One Command
+
+```bash
+found=$(ls lefthook.yml .lefthook.yml captainhook.json Build/captainhook.json .pre-commit-config.yaml .husky/pre-commit 2>/dev/null)
+[ -n "$found" ] && echo "$found" || echo "No hook framework configured"
+```
+
+`ls` exits non-zero as soon as one named file is missing, so test its output, not its exit
+status. Then install based on what's found:
+- `lefthook.yml` → `lefthook install` (or `make setup`)
+- `captainhook.json` or `Build/captainhook.json` → `composer install` (auto)
+- `.husky/` → `npm install` (auto)
+- `.pre-commit-config.yaml` → `pre-commit install`
+- Nothing → suggest adding one based on project language
+
+CaptainHook resolves `bootstrap` against the directory of `captainhook.json`, not the repository
+root, so a config in `Build/` needs `"bootstrap": "../vendor/autoload.php"`, or
+`"../.Build/vendor/autoload.php"` where Composer's `vendor-dir` is `.Build/vendor` (the TYPO3
+extension layout).
+
+## Updating Hook Versions (`pre-commit autoupdate`)
+
+`pre-commit autoupdate` bumps every hook's `rev` to the repo's **latest tag —
+including pre-releases**. It happily pins a beta (observed: isort
+`8.0.1 → 9.0.0b1`). After running it, review each bumped `rev` and pin any
+`aN`/`bN`/`rcN` back to the latest stable tag before committing. When a hook
+mirrors a locked dev dependency (black, isort), keep the hook `rev` aligned
+with the lockfile version instead of blindly taking the newest tag.
+
+### Nobody bumps a `rev` unless you arrange it
+
+`autoupdate` is a manual command, so a repository that never runs it keeps its
+hooks forever. Renovate can do it, but **its pre-commit manager is disabled by
+default** — enable it explicitly:
+
+```json
+{ "extends": ["config:recommended"], "pre-commit": { "enabled": true } }
+```
+
+Without that line no hook is ever offered an update, and nothing reports it:
+an absent pull request looks exactly like being up to date. Measured across one
+fleet of 37 repositories, the six without the manager sat on a validator tag 15
+minor versions behind while the other 31 tracked current — the correlation was
+complete.
+
+**A stale `rev` keeps enforcing the rule that version had.** Those six failed
+commits with `SKILL.md is 501 words (max 500)` months after the word cap had
+been replaced by a line-based one. When a pinned checker rejects your change,
+read the pin before you edit the file to satisfy it: an error message names the
+rule the *pinned* version enforces, which is not necessarily the rule that
+applies. Shortening prose to pass a retired cap is work spent against nothing.
+
+**Do not reach for a moving ref to escape this.** `rev: main`, or a `v1` branch
+that tracks main, is worse rather than better:
+
+```
+[WARNING] The 'rev' field ... appears to be a mutable reference (moving tag /
+branch).  Mutable references are never updated after first install and are not
+supported.
+```
+
+pre-commit clones a mutable ref once and never refreshes it, so the running
+version freezes per machine, invisibly and differently for each developer. An
+immutable tag in the file plus a bot that moves it is the supported shape.
+
+## Recommended Hooks by Stage
+
+### pre-commit (fast, <5s)
+- Code formatting (gofmt, php-cs-fixer, prettier)
+- Import sorting
+- YAML/JSON validation
+- Secret detection
+
+### commit-msg
+- Conventional commits validation
+- DCO sign-off enforcement
+- Minimum message length
+
+### pre-push (can be slower)
+- Full linting (golangci-lint, phpstan)
+- Smoke tests
+- Security scanning
+
+## Rules for Agents
+
+- NEVER skip hooks with `--no-verify`
+- If a hook fails, fix the underlying issue
+- If hooks aren't installed, install them before first commit
+- If no hook framework exists, suggest adding one in the PR
+
+## Hooks Are Fast Feedback — CI Is the Gate
+
+Local hooks are per-checkout, individually bypassable, and **absent in fresh
+clones and in most secondary worktrees**. Treat them as fast feedback, not as an
+enforcement boundary. The actual gate must be CI: every substantive check a hook
+runs locally (format, lint, static analysis, tests, secret scan, commit-message
+validation) needs an equivalent job in the pipeline. A check that runs only in a
+local hook is silently unenforced for anyone who never installed it. When
+auditing a repo, confirm that parity — a missing local hook is only a real gap
+if CI doesn't cover the same check.
+
+This also means it is legitimate to deliberately leave a repo with **no** local
+hooks when the hook can't run reliably outside its container (e.g. a pre-commit
+that needs a Docker-only service) — provided CI runs the equivalent check.
+Forcing such a hook onto every checkout just turns it into a landmine.
+
+## Auditing Installed Hooks (`--git-path` cwd gotcha)
+
+To find where a checkout's hooks live, prefer the path git computes itself:
+
+```bash
+cd "$repo" && git rev-parse --git-path hooks
+```
+
+**Run it from inside the repo.** For a plain (non-worktree) clone,
+`git rev-parse --git-path hooks` returns a path **relative to the current
+directory** (`.git/hooks`). Resolve or `find` it from elsewhere and you look in
+the wrong place and false-report "no hooks installed". (Worktrees and a
+configured `core.hooksPath` return absolute paths, which masks the bug — so it
+only bites on ordinary clones.) `cd` into the repo first, or resolve the path
+against the repo root, before inspecting it.
+
+## Troubleshooting
+
+### CaptainHook + git worktrees (FAQ)
+
+- **Symptom**: `composer install` fails with
+  `Shiver me timbers! CaptainHook could not install yer git hooks! (invalid .git path)`
+  when run in a secondary git worktree.
+- **Cause on the host**: Git worktrees use a `.git` *pointer file* (e.g. `gitdir: /path/to/bare/worktrees/NAME`),
+  not a directory. `captainhook/hook-installer` before 1.0.5 did not resolve a pointer to a
+  directory not named `.git` (a bare repository's worktree) and aborted. 1.0.5 resolves it and
+  prints `ARRRRR! We ARRR in a worktree, install is skipped!` instead — upgrade first.
+- **Cause in a container** (still current with 1.0.5): the container mounts only the
+  working tree, so the absolute `gitdir:` path does not exist inside it; `DotGit` checks
+  `is_dir()` on it and throws `invalid .git path`. Every other git call in that container fails
+  too (`fatal: not a git repository`), and a script that asks git gets a wrong answer — a
+  changelog check reports an existing tag as missing. See Symptom C below.
+- **Fix (container)**: mount `$(git rev-parse --path-format=absolute --git-common-dir)` at the
+  identical absolute path, with the worktree itself also mounted at its host path. A worktree
+  created with relative links (`worktree.useRelativePaths`, `--relative-paths`) resolves only
+  when the relative layout survives too: mount the common parent instead (Fix C below). The
+  shared `runTests.sh` of `netresearch/typo3-ci-workflows` adds the absolute mount with
+  netresearch/typo3-ci-workflows#333, from the first release that contains it; its README
+  section "Git worktrees" describes it.
+- **Fix (hook-installer before 1.0.5, host)**: upgrade. Its parser accepts only a `gitdir:`
+  path ending in `.git`, so a bare repository's worktree (`…/.bare/worktrees/NAME`) fails
+  before any hooks directory is looked at; creating that directory does not help. Where an
+  upgrade is not possible, use the scoped alternative below.
+- **Fix (scoped alternative)**: `composer config extra.captainhook.disable-plugin true`
+  before the install disables ONLY the captainhook plugin — all other Composer plugins
+  (phpstan/extension-installer, TYPO3 installers, …) keep working. It edits `composer.json`,
+  so revert it before committing (`git checkout composer.json`). Setting
+  `CAPTAINHOOK_DISABLE=true` in the environment has the same effect without the edit.
+- **Fix (last-resort fallback)**: `composer install --no-plugins` disables *all* Composer
+  plugins: phpstan extensions won't auto-register and TYPO3 composer installers won't place
+  extensions.
+
+### Hooks fail in worktrees / hang on host-unreachable services (FAQ)
+
+- **Symptom A**: `git commit` in a secondary worktree fails with
+  `./bin/captainhook: not found` — even though `--no-verify` was passed to
+  `git commit`.
+- **Cause A**: hooks installed by the primary checkout run with the worktree as
+  CWD and reference `./bin/captainhook` relatively; the worktree has no
+  `vendor/`/`bin/`. The commit-level `--no-verify` has a blind spot:
+  it skips only `pre-commit` and `commit-msg` — **`prepare-commit-msg` always
+  runs**, so a broken hook of that type still fails the commit. (`git push`
+  has its *own* `--no-verify`, which does skip `pre-push` entirely; the
+  commit-level flag simply does not cover it.)
+- **Symptom B**: a pre-commit hook that runs the test suite hangs forever on
+  the host because the tests need a docker-only service (e.g. a test DB only
+  resolvable inside the compose network). Killing the runner can leave a
+  zombie process holding the index lock. Note that in a worktree `.git` is a
+  pointer **file**, not a directory — the lock lives at
+  `$(git rev-parse --git-dir)/index.lock`. First confirm no git or hook
+  process is still alive (`pgrep -fl 'git|captainhook'`); only then remove
+  the stale lock and retry — deleting it under a live process corrupts the
+  index.
+- **Controlled bypass** (the only sanctioned exception to "never skip hooks"):
+  first run the hook's checks *manually via equivalent commands* (linters and
+  static analysis on the changed files, the test suite inside its docker
+  environment), then bypass the broken hook explicitly and disclose it:
+  `git -c core.hooksPath="$(mktemp -d)" commit -s ...` (an empty hooks
+  directory disables all hook types for that one command and — unlike
+  `/dev/null` — is portable to Windows) and `git push --no-verify`. Never
+  make the bypass the default; fix the hook environment or commit from the
+  primary checkout when possible.
+- **Symptom C**: a hook wrapper that runs CaptainHook (or any checker) inside a
+  docker compose service fails in a secondary worktree, while the same commit
+  passes in a plain clone. A fallback in the wrapper (e.g. "`composer install`
+  failed, try `composer update`") then rewrites `composer.lock` as a side
+  effect.
+- **Cause C**: the compose service mounts only the working-tree directory
+  (e.g. `.:/app`). In a worktree, `.git` is a pointer file whose `gitdir:`
+  names a path outside that mount (the main repo's `.git/worktrees/<name>`, or
+  `.bare/worktrees/<name>` in a bare layout), so every git call inside the
+  container fails with `fatal: not a git repository: …`. The wrapper's install
+  step fails for the same reason (compare the
+  [CaptainHook + git worktrees](#captainhook--git-worktrees-faq) FAQ) and falls
+  through to `update`.
+- **Fix C — make the git dir resolvable in the container**: mount
+  `$(git rev-parse --git-common-dir)` at the identical absolute path, or create
+  worktrees with relative links (`git worktree add --relative-paths`, or
+  `worktree.useRelativePaths=true`, git ≥ 2.48) and mount their common parent
+  directory, with each worktree at the same relative path beneath it (set the
+  service's working directory to that subpath instead of mounting the worktree
+  separately at e.g. `/app`). Relative links set the
+  `extensions.relativeWorktrees` repository extension in the shared config, so
+  every git that touches the repository — including the one in the container
+  image — must be ≥ 2.48. Or commit from a
+  checkout whose `.git` is a directory (a plain clone; a bare layout has none,
+  so use the mount).
+- **If you must commit from this worktree anyway**: undo the wrapper's rewrite
+  first. A lock change you are committing is staged, so restore from the
+  **index**, not from the branch: `git restore -- composer.lock`
+  (`git diff -- composer.lock` shows what this discards;
+  `git diff --cached -- composer.lock` shows the staged change it keeps).
+  Unstaged lock edits cannot be separated from the rewrite — regenerate them
+  (re-run the intended `composer require` / `update <pkg>`) where the container
+  works. Then run the hook's checks yourself inside the container and use the
+  controlled bypass above, and say so in the MR/PR.
+
+### Distinguish "the hook is broken" from "the check failed"
+
+The bypass above is for a hook that cannot *run*. A hook that ran fine and
+reported a genuine failure is a different situation with the same exit code, and
+conflating them turns the sanctioned bypass into a habit.
+
+Third case, easy to misread as either: the hook ran, the check ran, and the
+check failed for a reason that lives in the **environment**, not the change.
+Tells:
+
+- `Doctrine\DBAL\Exception\DriverException: could not find driver` — the host
+  has no `pdo_mysql`; the container does.
+- `Container /path/var/cache/dev/App_KernelDevDebugContainer.xml does not exist`
+  — `phpstan-symfony` needs a warmed container: `php bin/console cache:warmup`
+  before the analysis, not a baseline entry.
+- A failure count that does not move when you revert your change.
+
+The fix is the **venue**, not the flag. Run the identical gate where the
+environment is complete — usually the project's own compose service:
+
+```bash
+docker compose run --rm app-e2e php -d memory_limit=1G bin/phpunit --testsuite unit --no-coverage
+```
+
+Only after that passes does the shim bypass apply, and say in the commit or the
+PR which gate ran where. Reaching for `--no-verify` on this class hides a
+result you could have had.
+
+Watch for a cold-start race when you script this: a suite started immediately
+after `docker compose up -d` can fail one or two DB-dependent tests while the
+database is still accepting connections. Re-run once against the warm stack
+before believing the failure.
+
+### Tests started by a hook inherit the hook's repository
+
+Git exports its repository to a hook, and these variables override `git -C`. A
+commit hook of a linked worktree gets `GIT_DIR` and `GIT_INDEX_FILE`; in an
+ordinary checkout it gets `GIT_INDEX_FILE` alone, which `git commit -a` sets to
+the absolute path of the index lock. A pre-push hook of a worktree gets
+`GIT_DIR`. A test that builds a throwaway repository with
+`git -C <tmp> init`, `commit` and `tag` then works on the repository being
+committed to, or breaks its index. In a copy of netresearch/t3x-nr-passkeys-be, a pre-commit hook
+that ran PHPUnit added commits and the tag `v1.2.0` to the real repository and
+changed its configuration (found by review on netresearch/t3x-nr-passkeys-be#209;
+the same test had been copied from two other repositories).
+
+- **Fix in the test:** start every child process, git and the script under test
+  alike, with an environment without `GIT_*` variables. In PHP, pass a filtered
+  `getenv()` as the fifth argument of `proc_open()`; in shell,
+  `unset $(git rev-parse --local-env-vars)` first. `git -C`, `cd` and a
+  temporary directory do not help.
+- **Proof:** run the suite once with both variables pointing at a scratch
+  repository. It has to pass, and the scratch repository must be unchanged.
+  `sh -c` carries the variables into every part of a compound command:
+
+  ```bash
+  unset $(git rev-parse --local-env-vars)
+  probe=$(mktemp -d) && git -C "$probe" init -q
+  before=$(find "$probe" -type f -exec sha256sum {} + | sort)
+  env GIT_DIR="$probe/.git" GIT_INDEX_FILE="$probe/.git/index" sh -c '<test command>' \
+    && [ -n "$before" ] && [ "$before" = "$(find "$probe" -type f -exec sha256sum {} + | sort)" ] && echo unchanged
+  ```
+
+  Keep a case in the suite that sets `GIT_DIR` itself, so the filter cannot be
+  removed unnoticed.
+
+### Fresh worktree: missing deps and stale `hooksPath`
+
+A freshly-created worktree often breaks pre-commit/pre-push hooks — and can even
+abort the worktree creation itself:
+
+- It has no `vendor/`/`node_modules`, so a hook binary (`vendor/bin/grumphp`,
+  `captainhook`, a husky script) is missing.
+- A stale or broken `core.hooksPath` points at a nonexistent binary in **another**
+  worktree.
+
+Either failure aborts worktree-add, commits, and pushes. Bypass cleanly and
+**scoped** — don't disable hooks globally:
+
+```bash
+git -c core.hooksPath=/dev/null commit -s ...   # scoped to this one command
+git push --no-verify
+```
+
+(`core.hooksPath="$(mktemp -d)"` is the Windows-portable equivalent — see the
+controlled-bypass note above.) CI is authoritative for these repos (see "Hooks
+Are Fast Feedback — CI Is the Gate"), so a scoped bypass here is safe. Also: in a
+fresh worktree, `Read` a file before `Write`/`Edit` — there is no cached state
+for a path the tooling has not seen yet.
+
+**Lasting fix for CaptainHook.** The bypass above covers a command you type; it
+does not reach a tool that runs `git worktree add` itself. Shell hooks written by
+CaptainHook 5.29.2 or earlier exit 127 in a fresh worktree, because the relative
+path to `captainhook` does not exist there yet. A failing `post-checkout` makes
+`git worktree add` return that code although the worktree is complete. Plain
+`captainhook install` writes all eight hook types, also the disabled ones, so the
+failure hits projects that never enabled `post-checkout`.
+
+Shell hooks written by 5.29.3 or later print `CaptainHook executable not found` and
+exit 0 instead (measured: `git worktree add` returns 0). Upgrading the package does
+not rewrite installed hooks. In both layouts below, `post-checkout`, `post-merge`
+and `post-rewrite` count as enabled while the virtual hook `post-change` is enabled,
+because they run its actions; do not delete them then.
+
+- **Plain clone:** upgrade, then run `captainhook install -f --only-enabled` once,
+  with the project's `-c` and `-b` options. `-f` overwrites an enabled hook of any
+  origin, and disabled hooks stay as they are. Remove those by name, each only after
+  `grep -l 'installed by CaptainHook' <file>` lists it.
+- **Worktree of a bare repository:** `install` and `uninstall` report success but
+  miss the hooks git reads, unless `core.hooksPath` is set. Edit the files in
+  `git rev-parse --path-format=absolute --git-path hooks` by hand, after a backup:
+  delete disabled hooks with the same marker check, and insert into an enabled
+  `post-checkout`, directly before its last line, the check that 5.29.3 writes:
+  `[ -x vendor/bin/captainhook ] || exit 0`, with the path from that last line. Do
+  this only for a `#!/bin/sh` hook whose last line starts with a relative path.
+- **Composer plugin:** `captainhook/hook-installer` with
+  `extra.captainhook.only-enabled: true` installs only enabled hooks.
+  `captainhook/plugin-composer` 5.3.3 installs all of them on every
+  `composer install` and can abort in a bare-repository worktree with
+  `git directory not found`; replace it.
+
+The 5.29.3 check also covers `pre-commit` and `commit-msg`: without dependencies
+they pass **without running**. Install the dependencies before the first commit in a
+worktree, and do not add the check to those hooks by hand.
+
+### pre-commit first run: slow env build, lost stash on interrupt
+
+The **first** commit that triggers `pre-commit` builds a fresh virtualenv for
+every hook repo (ruff, markdownlint, shellcheck, …). That can take minutes, and
+it is easy to interrupt or time out that commit before it finishes.
+
+`pre-commit` stashes your **unstaged** changes for the duration of the run, then
+restores them at the end. If the run is killed mid-way, that restore may not
+happen — the unstaged edits silently vanish from the working tree. So **always
+`git status` after an interrupted commit**, and if files reverted, reapply the
+stash patch pre-commit left behind:
+
+```bash
+# pre-commit's cache dir is configurable: PRE_COMMIT_HOME, else XDG_CACHE_HOME/pre-commit,
+# else ~/.cache/pre-commit (macOS/other platforms may differ).
+PCH="${PRE_COMMIT_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/pre-commit}"
+PATCH=$(ls -t "$PCH"/patch* 2>/dev/null | head -1)   # newest patch<epoch>-<pid>
+git apply "$PATCH"
+```
+
+Then re-run the commit (the hook envs are now built, so it is fast).
+
+### Formatter hooks rewrite files — the first commit always bounces
+
+A hook that *reformats* rather than merely reports (`black`, `isort`,
+`ruff format`, `prettier`, `shfmt`, `end-of-file-fixer`) rewrites the staged
+file and then **fails the commit**, because what it wrote is not what you
+staged:
+
+```
+black....................................................................Failed
+- hook id: black
+- files were modified by this hook
+reformatted tests/test_completion.py
+```
+
+The commit did **not** happen. The fix is `git add` the now-reformatted files
+and commit again — the second run passes because the file is already formatted.
+Budget two `commit` invocations, and never `--amend` here (see
+"Never amend a commit with pre-commit-hook failures" in
+`commit-conventions.md`): the first commit does not exist, so `--amend` would
+rewrite the *previous* one.
+
+To avoid the bounce entirely, run the formatter before committing — matching
+whatever the repo actually uses, which is not always the one you expect:
+
+```bash
+# read the hook ids the repo declares, then run those
+yq '.repos[].hooks[].id' .pre-commit-config.yaml
+pre-commit run black isort --files <changed files>   # or: ruff format . && ruff check .
+```
+
+Checking the config matters: a project can use `black`+`isort` where you assumed
+`ruff format`, and a habit built around only one of them still bounces on every
+commit in the other.
+
+### Slow hooks: one `git commit` per call, and check each one landed
+
+With hook managers that run long or leave work behind (CaptainHook, lefthook,
+a `post-commit` hook that starts something in the background), chaining
+several commits in one command — `git add a && git commit … && git add b &&
+git commit …`, or a loop — has been observed to lose commits in the middle of
+the chain: one of them fails on the index lock while the rest succeed, and the
+chain's output scrolls past it. Sequential commands do not race by themselves,
+so the cause is whatever the hook leaves running; it is not established for
+every hook manager. The safe shape does not depend on it: one `git commit` per
+invocation, and after each, compare `HEAD` with what you expected instead of
+reading the commit's own output (see "Prove the commit landed before reporting
+it" in `commit-conventions.md`).
+
+### `--no-verify` only after confirming CI parity
+
+A local hook the CI pipeline does **not** run is not a real merge gate (see
+"Hooks Are Fast Feedback — CI Is the Gate"). If such a hook (say a repo-only
+`black`, `isort`, or `shellcheck`) reports the tree dirty and running its
+formatter would rewrite **hundreds of unrelated lines**, bypassing it with
+`--no-verify` is defensible — but only *after* you have read the CI workflow and
+confirmed it does not enforce that check. Concretely: verify the pipeline's
+`flake8` uses a narrow `--select`, that there is no `shellcheck`/`black` job,
+etc. A hook enforced only locally is already silently unenforced — don't let it
+dictate a massive diff that has nothing to do with your change. If CI *does* run
+the check, it is a real gate: fix the finding instead of bypassing it.
