@@ -730,6 +730,20 @@ export function mockSubmitAnswer(
 
 	const expected = Array.isArray(question.answerKey) ? [...question.answerKey].sort() : [];
 	const actual = Array.isArray(payload.submittedAnswer) ? [...payload.submittedAnswer].sort() : [];
+
+	if (question.questionType === 'single_choice' && actual.length !== 1) {
+		return Promise.reject(new Error('single-choice question requires exactly one selected option'));
+	}
+	if (question.questionType === 'multiple_choice') {
+		const requiredCount =
+			(question.spec as { requiredCount?: number }).requiredCount ?? expected.length;
+		if (actual.length !== requiredCount) {
+			return Promise.reject(
+				new Error(`multiple-choice question requires exactly ${requiredCount} selected options`)
+			);
+		}
+	}
+
 	const isCorrect =
 		expected.length === actual.length && expected.every((val, i) => val === actual[i]);
 	const earnedPoints = actual.filter((val) => expected.includes(val)).length;
