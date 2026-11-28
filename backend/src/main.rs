@@ -32,13 +32,17 @@ async fn main() -> Result<(), AppError> {
         .connect(&config.database_url)
         .await?;
 
-    let origin = config
-        .cors_origin
-        .parse::<HeaderValue>()
-        .map_err(|_| AppError::Config(format!("invalid CORS_ORIGIN: {}", config.cors_origin)))?;
+    let origins = config
+        .cors_origins
+        .iter()
+        .map(|raw| {
+            raw.parse::<HeaderValue>()
+                .map_err(|_| AppError::Config(format!("invalid CORS_ORIGIN entry: {raw}")))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let cors = CorsLayer::new()
-        .allow_origin(origin)
+        .allow_origin(origins)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, HeaderName::from_static("x-client-id")]);
 

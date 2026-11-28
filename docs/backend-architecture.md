@@ -10,7 +10,7 @@ This document describes the technology stack, folder structure, request flow, an
 | **Web Framework** | `axum` | `0.8.9` | HTTP routing, extractors (`Path`, `Query`, `State`, `Json`, `HeaderMap`), `IntoResponse` |
 | **Async Runtime** | `tokio` (`full`) | `1.54.1` | Async I/O and multi-threaded task runtime |
 | **Database Toolkit** | `sqlx` (`runtime-tokio`, `tls-rustls`, `postgres`, `macros`, `uuid`, `chrono`) | `0.9.1` | PostgreSQL connection pool (`PgPool`), strongly-typed `FromRow` queries, and migrations |
-| **Middleware** | `tower-http` (`cors`, `trace`) | `0.7.1` | CORS (`http://localhost:5173`, `GET/POST/OPTIONS`, `Content-Type`, `X-Client-Id`) and HTTP request tracing |
+| **Middleware** | `tower-http` (`cors`, `trace`) | `0.7.1` | CORS (comma-separated `CORS_ORIGIN`, `GET/POST/OPTIONS`, `Content-Type`, `X-Client-Id`) and HTTP request tracing |
 | **Error Handling** | `thiserror` | `2.0.21` | `AppError` enum mapped to `400`, `404`, and `500` JSON responses |
 | **Serialization** | `serde` / `serde_json` | `1.0.229` / `1.0.154` | `camelCase` JSON DTOs matching `frontend/src/lib/types/exam.ts` |
 | **Config & Logging** | `dotenvy` / `tracing` / `tracing-subscriber` | `0.15.7` / `0.1.44` / `0.3.23` | Environment loading from root `.env` and structured logs |
