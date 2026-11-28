@@ -3,7 +3,7 @@ import { getClientId } from '#lib/utils/client-id';
 
 const normalizedTestFlag = PUBLIC_TEST_FLAG?.trim().toLowerCase();
 export const USE_MOCK_API = normalizedTestFlag === 'y' || normalizedTestFlag === 'yes';
-const BASE_URL = PUBLIC_API_BASE_URL || 'http://localhost:8080';
+const BASE_URL = (PUBLIC_API_BASE_URL || 'http://localhost:8080/api').replace(/\/+$/, '');
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 	const headers = new Headers(init?.headers);

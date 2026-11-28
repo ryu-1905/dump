@@ -30,7 +30,7 @@ export async function listExams(params: ExamListParams = {}): Promise<PaginatedE
 	if (params.status && params.status !== 'all') qs.set('status', params.status);
 
 	const query = qs.toString();
-	return apiRequest<PaginatedExamsResponse>(query ? `/api/exams?${query}` : '/api/exams');
+	return apiRequest<PaginatedExamsResponse>(query ? `/exams?${query}` : '/exams');
 }
 
 export async function getExamOverview(examId: string): Promise<ExamDetail> {
@@ -39,7 +39,7 @@ export async function getExamOverview(examId: string): Promise<ExamDetail> {
 	if (USE_MOCK_API) {
 		return mockGetExamOverview(examId);
 	}
-	return apiRequest<ExamDetail>(`/api/exams/${encodeURIComponent(examId)}`);
+	return apiRequest<ExamDetail>(`/exams/${encodeURIComponent(examId)}`);
 }
 
 export async function getExamQuestion(
@@ -58,8 +58,8 @@ export async function getExamQuestion(
 	const query = qs.toString();
 	return apiRequest<ExamQuestionPayload>(
 		query
-			? `/api/exams/${encodeURIComponent(examId)}/questions?${query}`
-			: `/api/exams/${encodeURIComponent(examId)}/questions`
+			? `/exams/${encodeURIComponent(examId)}/questions?${query}`
+			: `/exams/${encodeURIComponent(examId)}/questions`
 	);
 }
 
@@ -72,7 +72,7 @@ export async function submitExamAnswer(
 	if (USE_MOCK_API) {
 		return mockSubmitAnswer(examId, payload);
 	}
-	return apiRequest<ExamAnswerRecord>(`/api/exams/${encodeURIComponent(examId)}/answers`, {
+	return apiRequest<ExamAnswerRecord>(`/exams/${encodeURIComponent(examId)}/answers`, {
 		method: 'POST',
 		body: JSON.stringify(payload)
 	});
