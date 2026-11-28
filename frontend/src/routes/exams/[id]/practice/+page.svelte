@@ -92,13 +92,35 @@
 			: null
 	);
 
+	let requiredChoiceCount = $derived.by(() => {
+		if (!currentQuestion) return 0;
+		if (currentQuestion.questionType === 'single_choice') return 1;
+		if (currentQuestion.questionType === 'multiple_choice') {
+			const specCount = choiceSpec?.requiredCount;
+			if (typeof specCount === 'number' && Number.isInteger(specCount) && specCount > 0) {
+				return specCount;
+			}
+			if (Array.isArray(currentQuestion.answerKey) && currentQuestion.answerKey.length > 0) {
+				return currentQuestion.answerKey.length;
+			}
+			return 2;
+		}
+		return 0;
+	});
+
+	let isMultipleChoiceLimitReached = $derived(
+		currentQuestion?.questionType === 'multiple_choice' &&
+			requiredChoiceCount > 0 &&
+			selectedOptionIds.length >= requiredChoiceCount
+	);
+
 	let canSubmitInteractive = $derived.by(() => {
 		if (!currentQuestion || submitting) return false;
-		if (
-			currentQuestion.questionType === 'single_choice' ||
-			currentQuestion.questionType === 'multiple_choice'
-		) {
-			return selectedOptionIds.length > 0;
+		if (currentQuestion.questionType === 'single_choice') {
+			return selectedOptionIds.length === 1;
+		}
+		if (currentQuestion.questionType === 'multiple_choice') {
+			return requiredChoiceCount > 0 && selectedOptionIds.length === requiredChoiceCount;
 		}
 		if (currentQuestion.questionType === 'hotspot' && hotspotSpec) {
 			return hotspotSpec.slots.every((s) => Boolean(mappingAnswer[s.id]));
@@ -127,8 +149,9 @@
 			case 'single_choice':
 				return 'Single Choice';
 			case 'multiple_choice': {
-				const count = choiceSpec?.requiredCount;
-				return count ? `Multiple Choice (Pick ${count})` : 'Multiple Choice';
+				return requiredChoiceCount > 0
+					? `Multiple Choice (Pick ${requiredChoiceCount})`
+					: 'Multiple Choice';
 			}
 			case 'hotspot':
 				return hotspotSpec?.mode === 'yes_no' ? 'Hotspot · Yes/No' : 'Hotspot · Dropdown';
@@ -168,8 +191,7 @@
 
 			const prevSub = payload.answer?.submittedAnswer;
 			selectedOptionIds = Array.isArray(prevSub) ? [...prevSub] : [];
-			mappingAnswer =
-				prevSub && !Array.isArray(prevSub) ? { ...prevSub } : {};
+			mappingAnswer = prevSub && !Array.isArray(prevSub) ? { ...prevSub } : {};
 		} catch (err) {
 			if (token !== requestToken) return;
 			error = err instanceof Error ? err.message : 'Failed to load question';
@@ -241,13 +263,8 @@
 		if (currentQuestion.questionType === 'multiple_choice') {
 			if (selectedOptionIds.includes(optionId)) {
 				selectedOptionIds = selectedOptionIds.filter((id) => id !== optionId);
-			} else {
-				const maxAllowed = choiceSpec?.requiredCount;
-				if (maxAllowed && selectedOptionIds.length >= maxAllowed) {
-					selectedOptionIds = [...selectedOptionIds.slice(1), optionId];
-				} else {
-					selectedOptionIds = [...selectedOptionIds, optionId];
-				}
+			} else if (requiredChoiceCount === 0 || selectedOptionIds.length < requiredChoiceCount) {
+				selectedOptionIds = [...selectedOptionIds, optionId];
 			}
 		}
 	}
@@ -508,13 +525,16 @@
 							{@const isSelected = selectedOptionIds.includes(option.id)}
 							{@const isRevealed = currentAnswer !== null}
 							{@const isRightOption = expectedChoices.includes(option.id)}
+							{@const isOptionDisabled =
+								submitting || (!isSelected && isMultipleChoiceLimitReached)}
 
 							<button
 								type="button"
-								disabled={submitting}
+								disabled={isOptionDisabled}
+								aria-pressed={isSelected}
 								onclick={() => handleChoiceClick(option.id)}
 								class={[
-									'flex w-full items-start gap-3 rounded-lg border p-3.5 text-left text-sm transition-colors disabled:opacity-70',
+									'flex w-full items-start gap-3 rounded-lg border p-3.5 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',
 									isRevealed && isRightOption
 										? 'border-emerald-500/50 bg-emerald-500/10 text-text'
 										: isRevealed && isSelected && !isRightOption
@@ -537,32 +557,60 @@
 								<div class="pt-0.5 leading-snug">
 									<RichHtml html={option.text} inline class="block" />
 									{#if headerState.showVi && option.textVi}
-										<RichHtml html={option.textVi} inline class="mt-1 block text-xs text-accent/90" />
+										<RichHtml
+											html={option.textVi}
+											inline
+											class="mt-1 block text-xs text-accent/90"
+										/>
 									{/if}
 								</div>
 							</button>
 						{/each}
 					</div>
 
-					<div class="flex items-center justify-end gap-2">
-						{#if canResetQuestion}
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						{#if currentQuestion.questionType === 'multiple_choice' && requiredChoiceCount > 0}
+							<p
+								class={[
+									'text-xs font-medium',
+									selectedOptionIds.length === requiredChoiceCount
+										? 'text-emerald-300'
+										: selectedOptionIds.length > 0
+											? 'text-amber-300'
+											: 'text-text-muted'
+								]}
+							>
+								{#if selectedOptionIds.length < requiredChoiceCount}
+									Select exactly {requiredChoiceCount} answers ({selectedOptionIds.length}/{requiredChoiceCount}
+									selected)
+								{:else}
+									{selectedOptionIds.length}/{requiredChoiceCount} selected
+								{/if}
+							</p>
+						{:else}
+							<span></span>
+						{/if}
+
+						<div class="flex items-center gap-2">
+							{#if canResetQuestion}
+								<button
+									type="button"
+									disabled={resettingQuestion || submitting}
+									onclick={() => void handleResetQuestion()}
+									class="rounded-lg border border-border bg-bg px-3.5 py-2 text-xs font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text disabled:opacity-40"
+								>
+									{resettingQuestion ? 'Resetting...' : 'Reset'}
+								</button>
+							{/if}
 							<button
 								type="button"
-								disabled={resettingQuestion || submitting}
-								onclick={() => void handleResetQuestion()}
-								class="rounded-lg border border-border bg-bg px-3.5 py-2 text-xs font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text disabled:opacity-40"
+								disabled={!canSubmitInteractive}
+								onclick={() => void handleCheckAnswer()}
+								class="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
 							>
-								{resettingQuestion ? 'Resetting...' : 'Reset'}
+								{submitting ? 'Checking...' : 'Check Answer'}
 							</button>
-						{/if}
-						<button
-							type="button"
-							disabled={!canSubmitInteractive}
-							onclick={() => void handleCheckAnswer()}
-							class="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-						>
-							{submitting ? 'Checking...' : 'Check Answer'}
-						</button>
+						</div>
 					</div>
 				{:else if currentQuestion.questionType === 'hotspot' && hotspotSpec}
 					<HotspotQuestion
@@ -766,9 +814,7 @@
 						onclick={() => void changeFilter('wrong')}
 						class={[
 							'rounded px-2 py-1 font-medium transition-colors',
-							filterParam === 'wrong'
-								? 'bg-red-500 text-white'
-								: 'text-text-muted hover:text-text'
+							filterParam === 'wrong' ? 'bg-red-500 text-white' : 'text-text-muted hover:text-text'
 						]}
 					>
 						Wrong
