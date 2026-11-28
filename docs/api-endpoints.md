@@ -4,7 +4,7 @@ This document defines the HTTP + JSON contract expected by the SvelteKit fronten
 
 ## Base Configuration
 
-- **Base URL:** Configured via `PUBLIC_API_BASE_URL` in `.env` (default: `http://localhost:8080`).
+- **Base URL:** Configured via `PUBLIC_API_BASE_URL` in `.env` (default: `http://localhost:8080/api`). Endpoint paths below are relative to this base URL (e.g. `/exams`, `/exams/:id`).
 - **Mock Toggle:** Set `PUBLIC_TEST_FLAG=N` in `.env` to switch the frontend from mock data to these real backend endpoints (`Y` for mock mode).
 - **CORS:** Configured via `CORS_ORIGIN` in `.env` (comma-separated origins, default `http://localhost:5173`; e.g. `https://dump.ryu.mooo.com` in production), allowing methods `GET, POST, OPTIONS` and headers `Content-Type, X-Client-Id`.
 
