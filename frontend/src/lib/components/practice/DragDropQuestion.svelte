@@ -1,4 +1,5 @@
 <script lang="ts">
+	import RichHtml from '#lib/components/practice/RichHtml.svelte';
 	import type { DragDropItem, DragDropSpec } from '#lib/types/exam';
 
 	interface Props {
@@ -114,9 +115,9 @@
 									: 'cursor-grab border-border bg-surface text-text hover:bg-surface-hover'
 						]}
 					>
-						<p class="font-medium">{item.text}</p>
+						<RichHtml html={item.text} inline class="block font-medium" />
 						{#if showVi && item.textVi}
-							<p class="mt-0.5 text-[11px] text-accent/90">{item.textVi}</p>
+							<RichHtml html={item.textVi} inline class="mt-0.5 block text-[11px] text-accent/90" />
 						{/if}
 					</button>
 				{/each}
@@ -168,9 +169,9 @@
 					>
 						<div class="flex items-start justify-between gap-2">
 							<div class="min-w-0">
-								<p class="text-xs font-semibold text-text-muted">{target.label}</p>
+								<RichHtml html={target.label} inline class="block text-xs font-semibold text-text-muted" />
 								{#if showVi && target.labelVi && target.labelVi !== target.label}
-									<p class="text-[11px] text-accent/90">{target.labelVi}</p>
+									<RichHtml html={target.labelVi} inline class="block text-[11px] text-accent/90" />
 								{/if}
 							</div>
 							{#if spec.mode === 'sequence' && !disabled}
@@ -208,9 +209,13 @@
 								class="mt-2 flex items-start justify-between gap-2 rounded border border-border bg-bg px-2.5 py-1.5 text-xs text-text"
 							>
 								<div class="min-w-0">
-									<p class="font-medium">{placedItem.text}</p>
+									<RichHtml html={placedItem.text} inline class="block font-medium" />
 									{#if showVi && placedItem.textVi}
-										<p class="mt-0.5 text-[11px] text-accent/90">{placedItem.textVi}</p>
+										<RichHtml
+											html={placedItem.textVi}
+											inline
+											class="mt-0.5 block text-[11px] text-accent/90"
+										/>
 									{/if}
 								</div>
 								{#if !disabled}

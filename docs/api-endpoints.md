@@ -250,12 +250,24 @@ Marks or unmarks a question for review (works independently both **before** and 
 
 ---
 
-### 6. Register / Ensure / Rename / Sync Client ID
+### 6. Community Question Notes (`question_notes`)
+
+Shared per-question study notes visible to all users; each user can create multiple notes and edit/delete their own (`X-Client-Id`).
+
+- **`GET /api/exams/:id/questions/:questionId/notes`**: Returns `QuestionNote[]` (`{ id, questionId, clientId, content, createdAt, updatedAt, isOwner, upvotes, downvotes, score, myVote }`) ordered by `score DESC, createdAt DESC`.
+- **`POST /api/exams/:id/questions/:questionId/notes`**: Requires `X-Client-Id`. Body `{ "content": "...", "parentId"?: number }` (`1..2000` chars; `parentId` allows strictly 1-level replies and returns `400` if targeting another reply). Returns created `QuestionNote`.
+- **`PUT /api/exams/:id/questions/:questionId/notes/:noteId`**: Requires `X-Client-Id` (owner only). Body `{ "content": "..." }`. Returns updated `QuestionNote`.
+- **`DELETE /api/exams/:id/questions/:questionId/notes/:noteId`**: Requires `X-Client-Id` (owner only). Returns `{ "id": ..., "deleted": true }`.
+- **`PUT /api/exams/:id/questions/:questionId/notes/:noteId/vote`**: Requires `X-Client-Id`. Body `{ "vote": 1 | -1 | 0 }` (`0` removes vote). Returns `{ noteId, upvotes, downvotes, score, myVote }`.
+
+---
+
+### 7. Register / Ensure / Rename / Sync Client ID
 
 - **`POST /api/clients/register`**: Registers a newly generated `X-Client-Id` if not already present in `clients` (or allocates a fresh unique UUID v4 if a collision occurs). Returns `{ "clientId": "..." }`.
 - **`POST /api/clients/ensure`**: Ensures an existing `X-Client-Id` from `localStorage` is recorded in `clients` without overwriting it. Returns `{ "clientId": "..." }`.
 - **`PUT /api/clients/id`**: Renames the current `X-Client-Id` to `{ "newClientId": "..." }` (`3–64` chars `[a-zA-Z0-9_-]`), migrating all `client_exam_progress` and `client_answers` via `ON UPDATE CASCADE`. Returns `409 Conflict` if `newClientId` already exists.
-- **`POST /api/clients/sync`**: Syncs to an existing `{ "targetClientId": "..." }` from another device. Verifies `targetClientId` exists in `clients` (returns `404 Not Found` otherwise), deletes the current `X-Client-Id` row from `clients` (cascading to `client_exam_progress` & `client_answers`), and returns `{ "clientId": targetClientId }`.
+- **`POST /api/clients/sync`**: Syncs to an existing `{ "targetClientId": "..." }` from another device. Verifies `targetClientId` exists in `clients` (returns `404 Not Found` otherwise), transfers `question_notes` and non-conflicting `question_note_votes` from the current `X-Client-Id` to `targetClientId` (if both IDs voted on the same note, `targetClientId`'s vote is preserved), deletes the old `X-Client-Id` row from `clients` (cascading to `client_exam_progress`, `client_answers`, `client_question_flags`, and any duplicate votes), and returns `{ "clientId": targetClientId }`.
 
 ---
 

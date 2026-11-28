@@ -16,5 +16,6 @@
   "svelte": "^5.57.3",
   "sveltekit": "^3.2.0",
   "adapter-node": "^6.0.6",
-  "tailwindcss": "^4.3.5"
+  "tailwindcss": "^4.3.5",
+  "marked": "^18.3.0"
 }

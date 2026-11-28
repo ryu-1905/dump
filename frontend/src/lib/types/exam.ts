@@ -197,6 +197,34 @@ export interface ResetExamResponse {
 	reset: boolean;
 }
 
+export interface QuestionNote {
+	id: number;
+	questionId: string;
+	parentId?: number | null;
+	clientId: string;
+	content: string;
+	createdAt: string;
+	updatedAt: string;
+	isOwner: boolean;
+	upvotes: number;
+	downvotes: number;
+	score: number;
+	myVote: -1 | 0 | 1;
+}
+
+export interface VoteNoteResponse {
+	noteId: number;
+	upvotes: number;
+	downvotes: number;
+	score: number;
+	myVote: -1 | 0 | 1;
+}
+
+export interface DeleteQuestionNoteResponse {
+	id: number;
+	deleted: boolean;
+}
+
 export function getExamStatus(exam: ExamSummary): ExamProgressStatus {
 	if (exam.answeredCount <= 0) return 'not_started';
 	if (exam.answeredCount >= exam.totalQuestions) return 'completed';

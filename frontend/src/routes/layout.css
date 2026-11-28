@@ -22,3 +22,115 @@
 		-webkit-font-smoothing: antialiased;
 	}
 }
+
+@layer components {
+	.rich-html a {
+		color: var(--color-accent);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		word-break: break-word;
+	}
+
+	.rich-html a:hover {
+		color: #60a5fa;
+	}
+
+	.rich-html img {
+		display: block;
+		max-width: 100%;
+		height: auto;
+		margin-block: 0.75rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--color-border);
+		background-color: var(--color-bg);
+	}
+
+	.rich-html.rich-html-zoomable img {
+		cursor: zoom-in;
+	}
+
+	.rich-html.rich-html-inline img {
+		display: inline-block;
+		margin-block: 0.25rem;
+		max-height: 16rem;
+	}
+
+	.rich-html p + p {
+		margin-top: 0.65rem;
+	}
+
+	.rich-html ul {
+		list-style-type: disc;
+		padding-left: 1.35rem;
+		margin-block: 0.5rem;
+	}
+
+	.rich-html ol {
+		list-style-type: decimal;
+		padding-left: 1.35rem;
+		margin-block: 0.5rem;
+	}
+
+	.rich-html li + li {
+		margin-top: 0.25rem;
+	}
+
+	.rich-html table {
+		display: block;
+		width: max-content;
+		max-width: 100%;
+		overflow-x: auto;
+		border-collapse: collapse;
+		margin-block: 0.75rem;
+		font-size: 0.85em;
+	}
+
+	.rich-html th,
+	.rich-html td {
+		border: 1px solid var(--color-border);
+		padding: 0.45rem 0.7rem;
+		text-align: left;
+		vertical-align: top;
+	}
+
+	.rich-html th {
+		background-color: var(--color-surface-hover);
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.rich-html code {
+		border-radius: 0.25rem;
+		border: 1px solid var(--color-border);
+		background-color: var(--color-bg);
+		padding: 0.1rem 0.35rem;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 0.875em;
+	}
+
+	.rich-html pre {
+		margin-block: 0.65rem;
+		overflow-x: auto;
+		border-radius: 0.5rem;
+		border: 1px solid var(--color-border);
+		background-color: var(--color-bg);
+		padding: 0.75rem;
+	}
+
+	.rich-html pre code {
+		border: none;
+		background: transparent;
+		padding: 0;
+	}
+
+	.rich-html blockquote {
+		margin-block: 0.65rem;
+		border-left: 3px solid var(--color-accent);
+		padding-left: 0.75rem;
+		color: var(--color-text-muted);
+	}
+
+	.rich-html strong {
+		font-weight: 600;
+	}
+}

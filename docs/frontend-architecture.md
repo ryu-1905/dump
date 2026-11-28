@@ -11,6 +11,7 @@ This document describes the technology stack, folder structure, data flow, and a
 | **App Framework** | SvelteKit | `^3.2.0` | File-based routing, `$app/env/public`, `$app/paths`, `$app/state`, `$app/navigation` |
 | **Bundler** | Vite | `^8.3.8` | Fast HMR dev server and SSR/client production bundling |
 | **Styling** | Tailwind CSS v4 (`@tailwindcss/vite`) | `^4.3.5` | CSS-first utility styling and `@theme` design tokens |
+| **Markdown Parser** | `marked` (`marked.lexer`) | `^18.3.0` | CommonMark/GFM tokenization for safe Svelte Community Note rendering |
 | **Language** | TypeScript (`strict: true`) | `^6.0.3` | End-to-end type safety across routes, API contracts, and components |
 | **Linting & Formatting** | ESLint + Prettier (`prettier-plugin-tailwindcss`) | `^10.15.0` / `^3.10.1` | Code quality, Svelte 5 lint rules, and consistent class/code formatting |
 | **Type Diagnostics** | `svelte-check` | `^4.7.8` | Static template and TypeScript verification |
@@ -54,7 +55,11 @@ frontend/
             └── practice/           # Microsoft-exam-style interactive question components
                 ├── CaseStudyPanel.svelte   # Tabbed Case Study split pane (Overview/Requirements/Issues)
                 ├── HotspotQuestion.svelte  # Dropdown & Yes/No table question renderer
-                └── DragDropQuestion.svelte # Drag-and-drop / click-to-place Matching & Sequence renderer
+                ├── DragDropQuestion.svelte # Drag-and-drop / click-to-place Matching & Sequence renderer
+                ├── RichHtml.svelte         # Trusted HTML renderer for seeded exam content + image lightbox
+                ├── NoteMarkdown.svelte     # Safe zero-{@html} Markdown renderer (marked.lexer) + lightbox
+                ├── MarkdownNoteEditor.svelte # Quick-insert Markdown toolbar + Write/Preview editor
+                └── QuestionNotesCard.svelte # Shared community notes per question (list/add/edit/delete)
 ```
 
 ---
@@ -82,6 +87,7 @@ flowchart LR
 3. **Practice Session (`/exams/[id]/practice`):** Driven by URL query parameters `?q=<questionIndex>` and optional `?topic=<topicId>`.
    - Navigating (`Previous`, `Next`, or Question Navigator) updates `?q=` via `goto(...)`, triggering `getExamQuestion(...)` to fetch that single question and persist `lastQuestionIndex`.
    - Selecting an answer updates local selection; clicking **Check Answer** calls `submitExamAnswer(...)` across all gradable question types (`single_choice`, `multiple_choice`, `hotspot`, `drag_drop`) and reveals correctness, partial credit (`earnedPoints / maxPoints`), explanation, and **Keywords** (`simulation` reveals Solution Steps by default).
+   - **Trusted Exam HTML:** Question prompts, answer choices/labels, explanations, and Case Study sections render HTML via `RichHtml.svelte` (with automatic `whitespace-pre-line` fallback for plain-text `\n` strings and click-to-zoom image lightbox). User-generated Community Notes (`QuestionNotesCard.svelte`) never use `{@html}`; instead they use `MarkdownNoteEditor.svelte` (selection-aware formatting toolbar + `Write`/`Preview` tabs) and `NoteMarkdown.svelte` (`marked.lexer` AST rendered purely with Svelte elements).
 
 ### State Management & Browser Storage
 - **Component & Cross-Route State:** Uses Svelte 5 runes (`$state`, `$derived`, `$effect`). Shared header state (`examCode`, `showVi`) lives in `src/lib/state/header.svelte.ts`.

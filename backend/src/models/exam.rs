@@ -449,6 +449,67 @@ pub struct ResetExamResponse {
     pub reset: bool,
 }
 
+/// Community note attached to a question (`question_notes`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionNote {
+    pub id: i64,
+    pub question_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<i64>,
+    pub client_id: String,
+    pub content: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub is_owner: bool,
+    pub upvotes: i64,
+    pub downvotes: i64,
+    pub score: i64,
+    pub my_vote: i16,
+}
+
+/// Request body accepted by `POST /api/exams/{id}/questions/{questionId}/notes`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateQuestionNoteRequest {
+    pub content: String,
+    #[serde(default)]
+    pub parent_id: Option<i64>,
+}
+
+/// Request body accepted by `PUT /api/exams/{id}/questions/{questionId}/notes/{noteId}`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateQuestionNoteRequest {
+    pub content: String,
+}
+
+/// Response returned by `DELETE /api/exams/{id}/questions/{questionId}/notes/{noteId}`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteQuestionNoteResponse {
+    pub id: i64,
+    pub deleted: bool,
+}
+
+/// Request body accepted by `PUT /api/exams/{id}/questions/{questionId}/notes/{noteId}/vote`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoteNoteRequest {
+    pub vote: i16,
+}
+
+/// Response returned by `PUT /api/exams/{id}/questions/{questionId}/notes/{noteId}/vote`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoteNoteResponse {
+    pub note_id: i64,
+    pub upvotes: i64,
+    pub downvotes: i64,
+    pub score: i64,
+    pub my_vote: i16,
+}
+
 /// Response returned by client registration/ensure/rename endpoints.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

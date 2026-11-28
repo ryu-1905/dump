@@ -8,10 +8,12 @@ use axum::{
 use crate::{
     error::AppError,
     models::exam::{
-        ClientInfoResponse, ExamAnswerRecord, ExamDetail, ExamListQuery, ExamQuestionPayload,
-        ExamQuestionQuery, FlagQuestionRequest, FlagQuestionResponse, NormalizedExamListParams,
-        PaginatedExamsResponse, QuestionFilter, RenameClientRequest, ResetExamResponse,
-        ResetQuestionResponse, SubmitAnswerRequest, SyncClientRequest,
+        ClientInfoResponse, CreateQuestionNoteRequest, DeleteQuestionNoteResponse,
+        ExamAnswerRecord, ExamDetail, ExamListQuery, ExamQuestionPayload, ExamQuestionQuery,
+        FlagQuestionRequest, FlagQuestionResponse, NormalizedExamListParams,
+        PaginatedExamsResponse, QuestionFilter, QuestionNote, RenameClientRequest,
+        ResetExamResponse, ResetQuestionResponse, SubmitAnswerRequest, SyncClientRequest,
+        UpdateQuestionNoteRequest, VoteNoteRequest, VoteNoteResponse,
     },
     repositories::exam_repo,
     state::AppState,
@@ -228,6 +230,92 @@ async fn reset_exam_progress_handler(
     Ok(Json(response))
 }
 
+/// `GET /api/exams/{id}/questions/{question_id}/notes` — lists all users' notes for a question.
+async fn list_question_notes_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((exam_id, question_id)): Path<(String, String)>,
+) -> Result<Json<Vec<QuestionNote>>, AppError> {
+    let client_id = parse_optional_client_id(&headers)?;
+    let notes =
+        exam_repo::list_question_notes(&state.pool, &exam_id, &question_id, client_id.as_deref())
+            .await?;
+    Ok(Json(notes))
+}
+
+/// `POST /api/exams/{id}/questions/{question_id}/notes` — adds a community note by `X-Client-Id`.
+async fn create_question_note_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((exam_id, question_id)): Path<(String, String)>,
+    Json(payload): Json<CreateQuestionNoteRequest>,
+) -> Result<Json<QuestionNote>, AppError> {
+    let client_id = require_client_id(&headers)?;
+    let note = exam_repo::create_question_note(
+        &state.pool,
+        &exam_id,
+        &question_id,
+        &client_id,
+        &payload.content,
+        payload.parent_id,
+    )
+    .await?;
+    Ok(Json(note))
+}
+
+/// `PUT /api/exams/{id}/questions/{question_id}/notes/{note_id}` — edits a note owned by `X-Client-Id`.
+async fn update_question_note_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((exam_id, question_id, note_id)): Path<(String, String, i64)>,
+    Json(payload): Json<UpdateQuestionNoteRequest>,
+) -> Result<Json<QuestionNote>, AppError> {
+    let client_id = require_client_id(&headers)?;
+    let note = exam_repo::update_question_note(
+        &state.pool,
+        &exam_id,
+        &question_id,
+        note_id,
+        &client_id,
+        &payload.content,
+    )
+    .await?;
+    Ok(Json(note))
+}
+
+/// `DELETE /api/exams/{id}/questions/{question_id}/notes/{note_id}` — deletes a note owned by `X-Client-Id`.
+async fn delete_question_note_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((exam_id, question_id, note_id)): Path<(String, String, i64)>,
+) -> Result<Json<DeleteQuestionNoteResponse>, AppError> {
+    let client_id = require_client_id(&headers)?;
+    let res =
+        exam_repo::delete_question_note(&state.pool, &exam_id, &question_id, note_id, &client_id)
+            .await?;
+    Ok(Json(res))
+}
+
+/// `PUT /api/exams/{id}/questions/{question_id}/notes/{note_id}/vote` — sets upvote/downvote/unvote.
+async fn vote_question_note_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((exam_id, question_id, note_id)): Path<(String, String, i64)>,
+    Json(payload): Json<VoteNoteRequest>,
+) -> Result<Json<VoteNoteResponse>, AppError> {
+    let client_id = require_client_id(&headers)?;
+    let res = exam_repo::vote_question_note(
+        &state.pool,
+        &exam_id,
+        &question_id,
+        note_id,
+        &client_id,
+        payload.vote,
+    )
+    .await?;
+    Ok(Json(res))
+}
+
 /// `POST /api/clients/register` — registers a new unique client ID (generates one if taken).
 async fn register_client_handler(
     State(state): State<AppState>,
@@ -293,6 +381,18 @@ pub fn router() -> Router<AppState> {
         .route(
             "/exams/{id}/flags/{question_id}",
             delete(unflag_question_handler),
+        )
+        .route(
+            "/exams/{id}/questions/{question_id}/notes",
+            get(list_question_notes_handler).post(create_question_note_handler),
+        )
+        .route(
+            "/exams/{id}/questions/{question_id}/notes/{note_id}",
+            put(update_question_note_handler).delete(delete_question_note_handler),
+        )
+        .route(
+            "/exams/{id}/questions/{question_id}/notes/{note_id}/vote",
+            put(vote_question_note_handler),
         )
         .route("/clients/register", post(register_client_handler))
         .route("/clients/ensure", post(ensure_client_handler))

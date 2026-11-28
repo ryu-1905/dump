@@ -1,4 +1,5 @@
 <script lang="ts">
+	import RichHtml from '#lib/components/practice/RichHtml.svelte';
 	import type { CaseStudy } from '#lib/types/exam';
 
 	interface Props {
@@ -69,14 +70,13 @@
 		{/if}
 
 		{#if activeSection}
-			<div class="space-y-3 p-4 text-sm leading-relaxed whitespace-pre-line text-text">
-				<p>{activeSection.content}</p>
+			<div class="space-y-3 p-4 text-sm leading-relaxed text-text">
+				<RichHtml html={activeSection.content} />
 				{#if showVi && activeSection.contentVi}
-					<p
+					<RichHtml
+						html={activeSection.contentVi}
 						class="rounded-lg border border-accent/20 bg-accent/5 px-3 py-2.5 text-xs leading-relaxed text-accent/90"
-					>
-						{activeSection.contentVi}
-					</p>
+					/>
 				{/if}
 			</div>
 		{/if}
