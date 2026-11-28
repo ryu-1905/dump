@@ -12,6 +12,14 @@ erDiagram
     topics ||--o{ questions : contains
     exams ||--o{ client_exam_progress : tracks
     questions ||--o{ client_answers : answered_by
+    clients ||--o{ client_exam_progress : owns
+    clients ||--o{ client_answers : submits
+
+    clients {
+        text id PK
+        timestamptz created_at
+        timestamptz updated_at
+    }
 
     exams {
         text id PK
@@ -48,13 +56,13 @@ erDiagram
         jsonb images
     }
     client_exam_progress {
-        uuid client_id PK
+        text client_id PK,FK
         text exam_id PK,FK
         int last_question_index
         timestamptz updated_at
     }
     client_answers {
-        uuid client_id PK
+        text client_id PK,FK
         text question_id PK,FK
         text exam_id FK
         int question_index
@@ -70,8 +78,12 @@ erDiagram
 exams (id PK)
  ├──< topics (PK: exam_id, id | FK: exam_id -> exams.id)
  │     └──< questions (id PK | UNIQUE: (exam_id, id), (exam_id, question_index) | FK: (exam_id, topic_id) -> topics)
- │           └──< client_answers (PK: client_id, question_id | FK: (exam_id, question_id) -> questions(exam_id, id))
- └──< client_exam_progress (PK: client_id, exam_id | FK: exam_id -> exams.id)
+ │           └──< client_answers (PK: client_id, question_id | FK: client_id -> clients.id, (exam_id, question_id) -> questions)
+ └──< client_exam_progress (PK: client_id, exam_id | FK: client_id -> clients.id, exam_id -> exams.id)
+
+clients (id PK)
+ ├──< client_exam_progress (ON UPDATE CASCADE)
+ └──< client_answers (ON UPDATE CASCADE)
 ```
 
 ---
@@ -83,7 +95,7 @@ exams (id PK)
 - **Plain `TEXT` + Inline Media Placeholders (`[[img:<id>]]`):** `prompt`, `prompt_vi`, `explanation`, and `explanation_vi` store plain text; inline images are referenced by placeholder tokens resolved against `questions.images` (`JSONB` array of `{ id, url, alt }`).
 - **`options` as `JSONB`:** Stores `[{ id, label, text, textVi }]` directly on `questions` to avoid extra joins per question while preserving option order.
 - **`show_answer_by_default`:** Allows non-choice `SIMULATION` questions to store `options = '[]'` and `correct_option_ids = '{}'` while keeping `CHECK (show_answer_by_default OR cardinality(correct_option_ids) >= 1)` enforced for standard choice questions.
-- **Per-Client Isolation (`client_id UUID`):** `client_exam_progress` and `client_answers` isolate progress by the browser's `X-Client-Id` UUID.
+- **Per-Client Isolation (`clients.id TEXT`):** `clients` registers each active `X-Client-Id` (auto-generated UUID v4 text or user-customized ID) and enforces `ON UPDATE CASCADE` to `client_exam_progress` and `client_answers` so renaming a Client ID migrates all progress atomically.
 
 ---
 

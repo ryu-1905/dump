@@ -247,3 +247,24 @@ pub struct SubmitAnswerRequest {
     pub question_index: i32,
     pub selected_option_ids: Vec<String>,
 }
+
+/// Response returned by client registration/ensure/rename endpoints.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientInfoResponse {
+    pub client_id: String,
+}
+
+/// Request body accepted by `PUT /api/clients/id`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameClientRequest {
+    pub new_client_id: String,
+}
+
+/// Request body accepted by `POST /api/clients/sync`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncClientRequest {
+    pub target_client_id: String,
+}
