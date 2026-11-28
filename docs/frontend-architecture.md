@@ -49,8 +49,12 @@ frontend/
         ├── utils/
         │   └── client-id.ts        # Browser UUID generator/reader (localStorage key: dump_client_id)
         └── components/
-            ├── Header.svelte       # Sticky dark header (D logo, dynamic Home/exam code, VN toggle)
-            └── ExamCard.svelte     # Clickable exam summary card with progress bar
+            ├── Header.svelte       # Sticky dark header (D logo, dynamic Home/exam code, VN toggle, Client ID)
+            ├── ExamCard.svelte     # Clickable exam summary card with progress bar
+            └── practice/           # Microsoft-exam-style interactive question components
+                ├── CaseStudyPanel.svelte   # Tabbed Case Study split pane (Overview/Requirements/Issues)
+                ├── HotspotQuestion.svelte  # Dropdown & Yes/No table question renderer
+                └── DragDropQuestion.svelte # Drag-and-drop / click-to-place Matching & Sequence renderer
 ```
 
 ---
@@ -77,7 +81,7 @@ flowchart LR
 2. **Exam Overview (`/exams/[id]`):** Calls lightweight `getExamOverview(id)` (`GET /api/exams/:id`) to display exam metadata, summary stats, and the **Topics** list with server-computed `answeredCount` and a single synchronized `Continue` point.
 3. **Practice Session (`/exams/[id]/practice`):** Driven by URL query parameters `?q=<questionIndex>` and optional `?topic=<topicId>`.
    - Navigating (`Previous`, `Next`, or Question Navigator) updates `?q=` via `goto(...)`, triggering `getExamQuestion(...)` to fetch that single question and persist `lastQuestionIndex`.
-   - Clicking an option immediately calls `submitExamAnswer(...)` (no separate `Check Answer` button) and reveals correctness, explanation, and **Keywords**.
+   - Selecting an answer updates local selection; clicking **Check Answer** calls `submitExamAnswer(...)` across all gradable question types (`single_choice`, `multiple_choice`, `hotspot`, `drag_drop`) and reveals correctness, partial credit (`earnedPoints / maxPoints`), explanation, and **Keywords** (`simulation` reveals Solution Steps by default).
 
 ### State Management & Browser Storage
 - **Component & Cross-Route State:** Uses Svelte 5 runes (`$state`, `$derived`, `$effect`). Shared header state (`examCode`, `showVi`) lives in `src/lib/state/header.svelte.ts`.

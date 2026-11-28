@@ -6,7 +6,7 @@ This document defines the HTTP + JSON contract expected by the SvelteKit fronten
 
 - **Base URL:** Configured via `PUBLIC_API_BASE_URL` in `.env` (default: `http://localhost:8080/api`). Endpoint paths below are relative to this base URL (e.g. `/exams`, `/exams/:id`).
 - **Mock Toggle:** Set `PUBLIC_TEST_FLAG=N` in `.env` to switch the frontend from mock data to these real backend endpoints (`Y` for mock mode).
-- **CORS:** Configured via `CORS_ORIGIN` in `.env` (comma-separated origins, default `http://localhost:5173`; e.g. `https://dump.ryu.mooo.com` in production), allowing methods `GET, POST, OPTIONS` and headers `Content-Type, X-Client-Id`.
+- **CORS:** Configured via `CORS_ORIGIN` in `.env` (comma-separated origins, default `http://localhost:5173`; e.g. `https://dump.ryu.mooo.com` in production), allowing methods `GET, POST, PUT, DELETE, OPTIONS` and headers `Content-Type, X-Client-Id`.
 
 ## Common Request Headers
 
@@ -119,6 +119,8 @@ Loads one question by its actual exam question number (`q`), optionally scoped t
 | :--- | :--- | :--- | :--- |
 | `q` | integer | `lastQuestionIndex` or first question in scope | Actual 1-based exam question number (`question.index`, e.g. `31`–`65` for topic `inv`). |
 | `topic` | string | omitted | Optional `topicId` to filter the navigator and Next/Previous scope to one topic. |
+| `case_study` | string | omitted | Optional `caseStudyId` to filter the navigator and Next/Previous scope to one Case Study. |
+| `filter` | string | omitted (`all`) | Optional scope filter: `all`, `wrong` (previously answered incorrectly), or `flagged` (marked for review). |
 
 - **Side Effect:** Updates `last_question_index = question.index` in PostgreSQL for `(client_id, exam_id)`.
 - **Response (`200 OK` — `ExamQuestionPayload`):**
@@ -130,10 +132,10 @@ Loads one question by its actual exam question number (`q`), optionally scoped t
     "code": "MB-330",
     "title": "Microsoft Dynamics 365 Supply Chain Management",
     "vendor": "Microsoft",
-    "totalQuestions": 120,
+    "totalQuestions": 459,
     "answeredCount": 42,
     "lastQuestionIndex": 43,
-    "updatedAt": "2026-11-20",
+    "updatedAt": "2026-11-28",
     "description": "...",
     "descriptionVi": "...",
     "topics": [
@@ -150,51 +152,62 @@ Loads one question by its actual exam question number (`q`), optionally scoped t
   "question": {
     "id": "mb-330-q-43",
     "topicId": "inv",
+    "caseStudyId": "adventure-works",
     "index": 43,
+    "questionType": "single_choice",
     "prompt": "...",
     "promptVi": "...",
-    "multipleChoice": false,
-    "showAnswerByDefault": false,
-    "options": [
-      {
-        "id": "a",
-        "label": "A",
-        "text": "...",
-        "textVi": "..."
-      }
-    ],
-    "correctOptionIds": ["a"],
+    "spec": {
+      "options": [
+        { "id": "a", "label": "A", "text": "...", "textVi": "..." }
+      ]
+    },
+    "answerKey": ["a"],
+    "maxPoints": 1,
     "explanation": "...",
     "explanationVi": "...",
     "keywords": ["Location directives", "Restrict by unit", "Pallet"],
     "keywordsVi": ["Chỉ dẫn vị trí kho", "Giới hạn theo đơn vị", "Pallet"],
     "images": []
   },
+  "caseStudy": {
+    "id": "adventure-works",
+    "title": "Adventure Works Cycles",
+    "titleVi": "Adventure Works Cycles",
+    "sections": [
+      { "id": "overview", "title": "Overview", "titleVi": "Tổng quan", "content": "...", "contentVi": "..." }
+    ],
+    "images": []
+  },
   "answer": {
     "questionId": "mb-330-q-43",
-    "selectedOptionIds": ["a"],
+    "submittedAnswer": ["a"],
+    "earnedPoints": 1,
+    "maxPoints": 1,
     "isCorrect": true
   },
+  "isFlagged": false,
   "navItems": [
-    { "index": 31, "status": "correct" },
-    { "index": 32, "status": "incorrect" },
-    { "index": 43, "status": "unanswered" }
+    { "index": 31, "status": "correct", "isFlagged": false },
+    { "index": 32, "status": "incorrect", "isFlagged": true },
+    { "index": 43, "status": "unanswered", "isFlagged": false }
   ],
-  "answeredCount": 42
+  "answeredCount": 42,
+  "flaggedCount": 3
 }
 ```
 
-- `answer` is `null` if the client has not answered this question yet.
-- `navItems[].status` is one of `"unanswered" | "correct" | "incorrect"`.
-- `showAnswerByDefault` is `true` for non-choice questions such as `SIMULATION` (`options: []`, `correctOptionIds: []`).
-- `images` holds `{ id, url, alt? }` entries referenced inline via `[[img:<id>]]` placeholders in `prompt`/`explanation`.
+- `answer` is `null` if the client has not answered this question yet; `caseStudy` is omitted when the question is standalone.
+- `questionType` is one of `"single_choice" | "multiple_choice" | "hotspot" | "drag_drop" | "simulation"`.
+- `navItems[].status` is one of `"unanswered" | "correct" | "incorrect"`; `navItems[].isFlagged` is independent of `status`.
+- `images` holds `{ id, url, alt? }` entries referenced inline via `[[img:<id>]]` placeholders in `prompt`/`explanation`/`caseStudy.sections`.
 - Health check endpoint: `GET /health` returns `200 OK` (`{ "status": "ok" }`).
 
 ---
 
 ### 4. Submit Answer
 
-Evaluates the selected option(s), persists the answer and `lastQuestionIndex` for `(client_id, exam_id)`, and returns the graded result.
+Evaluates the submitted answer (choice array or slot/target map) with partial credit, persists the answer and `lastQuestionIndex` for `(client_id, exam_id)`, and returns the graded result.
 
 - **Method & Path:** `POST /api/exams/:id/answers`
 - **Path Parameters:**
@@ -205,23 +218,39 @@ Evaluates the selected option(s), persists the answer and `lastQuestionIndex` fo
 {
   "questionId": "mb-330-q-43",
   "questionIndex": 43,
-  "selectedOptionIds": ["a"]
+  "submittedAnswer": ["a"]
 }
 ```
+
+*(For `hotspot` / `drag_drop`, `submittedAnswer` is an object map such as `{ "s1": "c1", "s2": "c2" }`.)*
 
 - **Response (`200 OK` — `ExamAnswerRecord`):**
 
 ```json
 {
   "questionId": "mb-330-q-43",
-  "selectedOptionIds": ["a"],
+  "submittedAnswer": ["a"],
+  "earnedPoints": 1,
+  "maxPoints": 1,
   "isCorrect": true
 }
 ```
 
+- **`DELETE /api/exams/:id/answers/:questionId`**: Deletes the client's submitted answer for a single question (returning it to unanswered) and returns `{ "questionId": "...", "reset": true }`.
+- **`DELETE /api/exams/:id/answers`**: Clears all submitted answers, `client_exam_progress`, and `client_question_flags` for `(client_id, exam_id)` and returns `{ "examId": "...", "reset": true }`.
+
 ---
 
-### 5. Register / Ensure / Rename / Sync Client ID
+### 5. Mark for Review Flags (`client_question_flags`)
+
+Marks or unmarks a question for review (works independently both **before** and **after** answering). Requires `X-Client-Id`.
+
+- **`PUT /api/exams/:id/flags`**: Body `{ "questionId": "...", "questionIndex": 43 }`. Upserts flag and returns `{ "questionId": "...", "isFlagged": true }`.
+- **`DELETE /api/exams/:id/flags/:questionId`**: Removes the flag and returns `{ "questionId": "...", "isFlagged": false }`.
+
+---
+
+### 6. Register / Ensure / Rename / Sync Client ID
 
 - **`POST /api/clients/register`**: Registers a newly generated `X-Client-Id` if not already present in `clients` (or allocates a fresh unique UUID v4 if a collision occurs). Returns `{ "clientId": "..." }`.
 - **`POST /api/clients/ensure`**: Ensures an existing `X-Client-Id` from `localStorage` is recorded in `clients` without overwriting it. Returns `{ "clientId": "..." }`.

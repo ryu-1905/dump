@@ -1,5 +1,16 @@
 export type ExamProgressStatus = 'not_started' | 'in_progress' | 'completed';
 
+export type QuestionType =
+	| 'single_choice'
+	| 'multiple_choice'
+	| 'hotspot'
+	| 'drag_drop'
+	| 'simulation';
+
+export type QuestionFilter = 'all' | 'wrong' | 'flagged';
+
+export type AnswerValue = string[] | Record<string, string>;
+
 export interface ExamSummary {
 	id: string;
 	code: string;
@@ -33,24 +44,93 @@ export interface QuestionOption {
 	textVi?: string;
 }
 
+export interface ChoiceSpec {
+	options: QuestionOption[];
+	requiredCount?: number;
+}
+
+export interface HotspotSlotChoice {
+	id: string;
+	text: string;
+	textVi?: string;
+}
+
+export interface HotspotSlot {
+	id: string;
+	label: string;
+	labelVi?: string;
+	choices: HotspotSlotChoice[];
+}
+
+export interface HotspotSpec {
+	mode: 'dropdown' | 'yes_no';
+	slots: HotspotSlot[];
+}
+
+export interface DragDropItem {
+	id: string;
+	text: string;
+	textVi?: string;
+}
+
+export interface DragDropTarget {
+	id: string;
+	label: string;
+	labelVi?: string;
+}
+
+export interface DragDropSpec {
+	mode: 'matching' | 'sequence';
+	reusable: boolean;
+	pool: DragDropItem[];
+	targets: DragDropTarget[];
+}
+
+export interface QuestionImage {
+	id: string;
+	url: string;
+	alt?: string;
+}
+
+export interface CaseStudySection {
+	id: string;
+	title: string;
+	titleVi?: string;
+	content: string;
+	contentVi?: string;
+}
+
+export interface CaseStudy {
+	id: string;
+	title: string;
+	titleVi?: string;
+	sections: CaseStudySection[];
+	images: QuestionImage[];
+}
+
 export interface ExamQuestion {
 	id: string;
 	topicId: string;
+	caseStudyId?: string;
 	index: number;
+	questionType: QuestionType;
 	prompt: string;
 	promptVi?: string;
-	multipleChoice: boolean;
-	options: QuestionOption[];
-	correctOptionIds: string[];
+	spec: Record<string, unknown>;
+	answerKey: AnswerValue | null;
+	maxPoints: number;
 	explanation: string;
 	explanationVi?: string;
 	keywords?: string[];
 	keywordsVi?: string[];
+	images: QuestionImage[];
 }
 
 export interface ExamAnswerRecord {
 	questionId: string;
-	selectedOptionIds: string[];
+	submittedAnswer: AnswerValue;
+	earnedPoints: number;
+	maxPoints: number;
 	isCorrect: boolean;
 }
 
@@ -75,6 +155,7 @@ export type QuestionNavStatus = 'unanswered' | 'correct' | 'incorrect';
 export interface QuestionNavItem {
 	index: number;
 	status: QuestionNavStatus;
+	isFlagged: boolean;
 }
 
 export interface ExamQuestionPayload {
@@ -82,21 +163,38 @@ export interface ExamQuestionPayload {
 	totalInScope: number;
 	currentIndex: number;
 	question: ExamQuestion;
+	caseStudy?: CaseStudy | null;
 	answer: ExamAnswerRecord | null;
+	isFlagged: boolean;
 	navItems: QuestionNavItem[];
 	answeredCount: number;
-}
-
-export interface ExamPracticePayload {
-	exam: ExamDetail;
-	questions: ExamQuestion[];
-	answers: Record<string, ExamAnswerRecord>;
+	flaggedCount: number;
 }
 
 export interface SubmitAnswerRequest {
 	questionId: string;
 	questionIndex: number;
-	selectedOptionIds: string[];
+	submittedAnswer: AnswerValue;
+}
+
+export interface FlagQuestionRequest {
+	questionId: string;
+	questionIndex: number;
+}
+
+export interface FlagQuestionResponse {
+	questionId: string;
+	isFlagged: boolean;
+}
+
+export interface ResetQuestionResponse {
+	questionId: string;
+	reset: boolean;
+}
+
+export interface ResetExamResponse {
+	examId: string;
+	reset: boolean;
 }
 
 export function getExamStatus(exam: ExamSummary): ExamProgressStatus {

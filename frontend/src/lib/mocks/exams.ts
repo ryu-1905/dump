@@ -3,14 +3,18 @@ import {
 	type ExamAnswerRecord,
 	type ExamDetail,
 	type ExamListParams,
-	type ExamPracticePayload,
 	type ExamQuestion,
 	type ExamQuestionPayload,
 	type ExamSummary,
 	type ExamTopic,
+	type FlagQuestionRequest,
+	type FlagQuestionResponse,
 	type PaginatedExamsResponse,
+	type QuestionFilter,
 	type QuestionNavItem,
 	type QuestionNavStatus,
+	type ResetExamResponse,
+	type ResetQuestionResponse,
 	type SubmitAnswerRequest
 } from '#lib/types/exam';
 
@@ -412,34 +416,38 @@ function buildMockQuestions(exam: ExamSummary, topics: ExamTopic[]): ExamQuestio
 			id: `${exam.id}-q-${index}`,
 			topicId,
 			index,
+			questionType: multipleChoice ? 'multiple_choice' : 'single_choice',
 			prompt: isMb330First
 				? 'A company uses Dynamics 365 Supply Chain Management. You need to configure warehouse location directives so put-away work selects bulk locations only when pallet quantities are received. Which setup should you configure?'
 				: `[${exam.code}] Sample question #${index}: Which configuration best satisfies the operational requirement described for ${exam.title}?`,
 			promptVi: isMb330First
 				? 'Một công ty sử dụng Dynamics 365 Supply Chain Management. Bạn cần cấu hình chỉ dẫn vị trí kho (location directives) để công việc cất hàng chỉ chọn khu vực bulk khi nhận đủ số lượng theo pallet. Bạn nên cấu hình thiết lập nào?'
 				: `[${exam.code}] Câu hỏi mẫu #${index}: Cấu hình nào đáp ứng tốt nhất yêu cầu vận hành cho ${exam.title}?`,
-			multipleChoice,
-			options: labels.map((label) => ({
-				id: label.toLowerCase(),
-				label,
-				text: isMb330First
-					? {
-							A: 'Configure a location directive line with Restrict by unit set to Pallet.',
-							B: 'Enable Allow split on the work template.',
-							C: 'Assign a fixed picking location to the item.',
-							D: 'Set the warehouse inventory status to Blocked.'
-						}[label]
-					: `Option ${label} for ${exam.code} question #${index}`,
-				textVi: isMb330First
-					? {
-							A: 'Cấu hình dòng location directive với trường Restrict by unit đặt là Pallet.',
-							B: 'Bật tùy chọn Allow split trên work template.',
-							C: 'Gán một vị trí lấy hàng cố định cho sản phẩm.',
-							D: 'Đặt trạng thái tồn kho của kho thành Blocked.'
-						}[label]
-					: `Lựa chọn ${label} cho câu #${index} của đề ${exam.code}`
-			})),
-			correctOptionIds,
+			spec: {
+				requiredCount: multipleChoice ? 2 : 1,
+				options: labels.map((label) => ({
+					id: label.toLowerCase(),
+					label,
+					text: isMb330First
+						? {
+								A: 'Configure a location directive line with Restrict by unit set to Pallet.',
+								B: 'Enable Allow split on the work template.',
+								C: 'Assign a fixed picking location to the item.',
+								D: 'Set the warehouse inventory status to Blocked.'
+							}[label]
+						: `Option ${label} for ${exam.code} question #${index}`,
+					textVi: isMb330First
+						? {
+								A: 'Cấu hình dòng location directive với trường Restrict by unit đặt là Pallet.',
+								B: 'Bật tùy chọn Allow split trên work template.',
+								C: 'Gán một vị trí lấy hàng cố định cho sản phẩm.',
+								D: 'Đặt trạng thái tồn kho của kho thành Blocked.'
+							}[label]
+						: `Lựa chọn ${label} cho câu #${index} của đề ${exam.code}`
+				}))
+			},
+			answerKey: correctOptionIds,
+			maxPoints: correctOptionIds.length,
 			explanation: multipleChoice
 				? `Options ${correctOptionIds.map((id) => id.toUpperCase()).join(' and ')} are both required for ${exam.code} question #${index}.`
 				: `Option ${correctOptionIds[0].toUpperCase()} is correct because it directly enforces the required rule for ${exam.code} question #${index}.`,
@@ -451,7 +459,8 @@ function buildMockQuestions(exam: ExamSummary, topics: ExamTopic[]): ExamQuestio
 				: [exam.code, topicId.toUpperCase(), `Rule #${index}`],
 			keywordsVi: isMb330First
 				? ['Chỉ dẫn vị trí kho', 'Giới hạn theo đơn vị', 'Pallet', 'Cất hàng']
-				: [exam.code, `Chủ đề ${topicId.toUpperCase()}`, `Quy tắc #${index}`]
+				: [exam.code, `Chủ đề ${topicId.toUpperCase()}`, `Quy tắc #${index}`],
+			images: []
 		};
 	});
 }
@@ -561,9 +570,12 @@ function buildSeededAnswers(
 	const count = Math.min(exam.answeredCount, questions.length);
 	for (let i = 0; i < count; i++) {
 		const q = questions[i];
+		const key = Array.isArray(q.answerKey) ? [...q.answerKey] : [];
 		seeded[q.id] = {
 			questionId: q.id,
-			selectedOptionIds: [...q.correctOptionIds],
+			submittedAnswer: key,
+			earnedPoints: q.maxPoints,
+			maxPoints: q.maxPoints,
 			isCorrect: true
 		};
 	}
@@ -616,41 +628,14 @@ export function mockGetExamOverview(examId: string): Promise<ExamDetail> {
 	});
 }
 
-export function mockGetExamPractice(examId: string): Promise<ExamPracticePayload> {
-	const baseExam = MOCK_EXAMS.find((item) => item.id === examId);
-	if (!baseExam) {
-		return Promise.reject(new Error(`Exam "${examId}" not found`));
-	}
-
-	const store = readProgressStore();
-	const entry = store[examId];
-	const summary = mergeExamWithProgress(baseExam, entry);
-	const topics = buildMockTopics(summary);
-	const exam: ExamDetail = {
-		...summary,
-		description:
-			examId === 'mb-330'
-				? 'Practice questions covering product information, inventory control, procurement, sales, and warehouse management in Dynamics 365 Supply Chain Management.'
-				: `Comprehensive practice set for ${summary.code} (${summary.title}) organized by exam domains.`,
-		descriptionVi:
-			examId === 'mb-330'
-				? 'Bộ câu hỏi luyện tập về quản lý thông tin sản phẩm, kiểm soát tồn kho, mua hàng, bán hàng và quản lý kho trong Dynamics 365 Supply Chain Management.'
-				: `Bộ câu hỏi luyện tập tổng hợp cho ${summary.code} (${summary.title}), phân chia theo các nhóm chủ đề của kỳ thi.`,
-		topics
-	};
-	const questions = buildMockQuestions(summary, topics);
-	const answers = entry?.answers ?? buildSeededAnswers(baseExam, questions);
-
-	return Promise.resolve({
-		exam,
-		questions,
-		answers
-	});
-}
-
 export function mockGetExamQuestion(
 	examId: string,
-	options: { topicId?: string | null; q?: number | null } = {}
+	options: {
+		topicId?: string | null;
+		caseStudyId?: string | null;
+		filter?: QuestionFilter | null;
+		q?: number | null;
+	} = {}
 ): Promise<ExamQuestionPayload> {
 	const baseExam = MOCK_EXAMS.find((item) => item.id === examId);
 	if (!baseExam) {
@@ -708,7 +693,7 @@ export function mockGetExamQuestion(
 	const navItems: QuestionNavItem[] = scopedQuestions.map((item) => {
 		const rec = answers[item.id];
 		const status: QuestionNavStatus = !rec ? 'unanswered' : rec.isCorrect ? 'correct' : 'incorrect';
-		return { index: item.index, status };
+		return { index: item.index, status, isFlagged: false };
 	});
 
 	return Promise.resolve({
@@ -716,9 +701,12 @@ export function mockGetExamQuestion(
 		totalInScope: scopedQuestions.length,
 		currentIndex,
 		question,
+		caseStudy: null,
 		answer: answers[question.id] ?? null,
+		isFlagged: false,
 		navItems,
-		answeredCount: Object.keys(answers).length
+		answeredCount: Object.keys(answers).length,
+		flaggedCount: 0
 	});
 }
 
@@ -737,14 +725,17 @@ export function mockSubmitAnswer(
 		return Promise.reject(new Error(`Question "${payload.questionId}" not found`));
 	}
 
-	const expected = [...question.correctOptionIds].sort();
-	const actual = [...payload.selectedOptionIds].sort();
+	const expected = Array.isArray(question.answerKey) ? [...question.answerKey].sort() : [];
+	const actual = Array.isArray(payload.submittedAnswer) ? [...payload.submittedAnswer].sort() : [];
 	const isCorrect =
 		expected.length === actual.length && expected.every((val, i) => val === actual[i]);
+	const earnedPoints = actual.filter((val) => expected.includes(val)).length;
 
 	const record: ExamAnswerRecord = {
 		questionId: payload.questionId,
-		selectedOptionIds: [...payload.selectedOptionIds],
+		submittedAnswer: payload.submittedAnswer,
+		earnedPoints,
+		maxPoints: question.maxPoints,
 		isCorrect
 	};
 
@@ -763,4 +754,40 @@ export function mockSubmitAnswer(
 	writeProgressStore(store);
 
 	return Promise.resolve(record);
+}
+
+export function mockFlagQuestion(
+	_examId: string,
+	payload: FlagQuestionRequest
+): Promise<FlagQuestionResponse> {
+	return Promise.resolve({ questionId: payload.questionId, isFlagged: true });
+}
+
+export function mockUnflagQuestion(
+	_examId: string,
+	questionId: string
+): Promise<FlagQuestionResponse> {
+	return Promise.resolve({ questionId, isFlagged: false });
+}
+
+export function mockResetQuestionAnswer(
+	examId: string,
+	questionId: string
+): Promise<ResetQuestionResponse> {
+	const store = readProgressStore();
+	const entry = store[examId];
+	if (entry && entry.answers[questionId]) {
+		const nextAnswers = { ...entry.answers };
+		delete nextAnswers[questionId];
+		store[examId] = { ...entry, answers: nextAnswers };
+		writeProgressStore(store);
+	}
+	return Promise.resolve({ questionId, reset: true });
+}
+
+export function mockResetExamProgress(examId: string): Promise<ResetExamResponse> {
+	const store = readProgressStore();
+	store[examId] = { lastQuestionIndex: null, answers: {} };
+	writeProgressStore(store);
+	return Promise.resolve({ examId, reset: true });
 }

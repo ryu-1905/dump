@@ -2,15 +2,16 @@ use axum::{
     Json, Router,
     extract::{Path, Query, State},
     http::HeaderMap,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 
 use crate::{
     error::AppError,
     models::exam::{
         ClientInfoResponse, ExamAnswerRecord, ExamDetail, ExamListQuery, ExamQuestionPayload,
-        ExamQuestionQuery, NormalizedExamListParams, PaginatedExamsResponse, RenameClientRequest,
-        SubmitAnswerRequest, SyncClientRequest,
+        ExamQuestionQuery, FlagQuestionRequest, FlagQuestionResponse, NormalizedExamListParams,
+        PaginatedExamsResponse, QuestionFilter, RenameClientRequest, ResetExamResponse,
+        ResetQuestionResponse, SubmitAnswerRequest, SyncClientRequest,
     },
     repositories::exam_repo,
     state::AppState,
@@ -107,11 +108,21 @@ async fn get_exam_question_handler(
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
+    let case_study_id = query
+        .case_study
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    let filter = QuestionFilter::parse(query.filter.as_deref())?;
+
     let payload = exam_repo::get_exam_question(
         &state.pool,
         &exam_id,
         client_id.as_deref(),
         topic_id,
+        case_study_id,
+        filter,
         query.q,
     )
     .await?;
@@ -142,6 +153,79 @@ async fn submit_exam_answer_handler(
         exam_repo::submit_exam_answer(&state.pool, &exam_id, client_id.as_deref(), &payload)
             .await?;
     Ok(Json(record))
+}
+
+/// `PUT /api/exams/{id}/flags` — marks a question for review (works before or after answering).
+async fn flag_question_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(exam_id): Path<String>,
+    Json(payload): Json<FlagQuestionRequest>,
+) -> Result<Json<FlagQuestionResponse>, AppError> {
+    let client_id = require_client_id(&headers)?;
+
+    if payload.question_id.trim().is_empty() {
+        return Err(AppError::BadRequest(
+            "questionId must not be empty".to_string(),
+        ));
+    }
+    if payload.question_index < 1 {
+        return Err(AppError::BadRequest(
+            "questionIndex must be >= 1".to_string(),
+        ));
+    }
+
+    let response = exam_repo::flag_question(&state.pool, &exam_id, &client_id, &payload).await?;
+    Ok(Json(response))
+}
+
+/// `DELETE /api/exams/{id}/flags/{question_id}` — removes a question's review flag.
+async fn unflag_question_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((exam_id, question_id)): Path<(String, String)>,
+) -> Result<Json<FlagQuestionResponse>, AppError> {
+    let client_id = require_client_id(&headers)?;
+
+    if question_id.trim().is_empty() {
+        return Err(AppError::BadRequest(
+            "questionId must not be empty".to_string(),
+        ));
+    }
+
+    let response =
+        exam_repo::unflag_question(&state.pool, &exam_id, &client_id, &question_id).await?;
+    Ok(Json(response))
+}
+
+/// `DELETE /api/exams/{id}/answers/{question_id}` — resets a single question back to unanswered.
+async fn reset_question_answer_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((exam_id, question_id)): Path<(String, String)>,
+) -> Result<Json<ResetQuestionResponse>, AppError> {
+    let client_id = require_client_id(&headers)?;
+
+    if question_id.trim().is_empty() {
+        return Err(AppError::BadRequest(
+            "questionId must not be empty".to_string(),
+        ));
+    }
+
+    let response =
+        exam_repo::reset_question_answer(&state.pool, &exam_id, &client_id, &question_id).await?;
+    Ok(Json(response))
+}
+
+/// `DELETE /api/exams/{id}/answers` — resets all answers, progress, and flags for an exam.
+async fn reset_exam_progress_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(exam_id): Path<String>,
+) -> Result<Json<ResetExamResponse>, AppError> {
+    let client_id = require_client_id(&headers)?;
+    let response = exam_repo::reset_exam_progress(&state.pool, &exam_id, &client_id).await?;
+    Ok(Json(response))
 }
 
 /// `POST /api/clients/register` — registers a new unique client ID (generates one if taken).
@@ -197,7 +281,19 @@ pub fn router() -> Router<AppState> {
         .route("/exams", get(list_exams_handler))
         .route("/exams/{id}", get(get_exam_overview_handler))
         .route("/exams/{id}/questions", get(get_exam_question_handler))
-        .route("/exams/{id}/answers", post(submit_exam_answer_handler))
+        .route(
+            "/exams/{id}/answers",
+            post(submit_exam_answer_handler).delete(reset_exam_progress_handler),
+        )
+        .route(
+            "/exams/{id}/answers/{question_id}",
+            delete(reset_question_answer_handler),
+        )
+        .route("/exams/{id}/flags", put(flag_question_handler))
+        .route(
+            "/exams/{id}/flags/{question_id}",
+            delete(unflag_question_handler),
+        )
         .route("/clients/register", post(register_client_handler))
         .route("/clients/ensure", post(ensure_client_handler))
         .route("/clients/id", put(rename_client_handler))
