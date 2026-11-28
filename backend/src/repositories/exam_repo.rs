@@ -1,13 +1,13 @@
 use std::collections::HashSet;
 
-use sqlx::{FromRow, PgPool, types::Json, types::Uuid};
+use sqlx::{FromRow, PgPool, types::Json};
 
 use crate::{
     error::AppError,
     models::exam::{
-        ExamAnswerRecord, ExamDetail, ExamQuestion, ExamQuestionPayload, ExamSummary, ExamTopic,
-        NormalizedExamListParams, PaginatedExamsResponse, QuestionImage, QuestionNavItem,
-        QuestionNavStatus, QuestionOption, SubmitAnswerRequest,
+        ClientInfoResponse, ExamAnswerRecord, ExamDetail, ExamQuestion, ExamQuestionPayload,
+        ExamSummary, ExamTopic, NormalizedExamListParams, PaginatedExamsResponse, QuestionImage,
+        QuestionNavItem, QuestionNavStatus, QuestionOption, SubmitAnswerRequest,
     },
 };
 
@@ -23,7 +23,7 @@ WITH question_counts AS (
 answer_counts AS (
     SELECT exam_id, COUNT(*)::bigint AS answered_count
     FROM client_answers
-    WHERE $1::uuid IS NOT NULL AND client_id = $1::uuid
+    WHERE $1::text IS NOT NULL AND client_id = $1::text
     GROUP BY exam_id
 ),
 exam_stats AS (
@@ -41,7 +41,7 @@ exam_stats AS (
     LEFT JOIN question_counts qc ON qc.exam_id = e.id
     LEFT JOIN answer_counts ac ON ac.exam_id = e.id
     LEFT JOIN client_exam_progress cep
-        ON cep.exam_id = e.id AND $1::uuid IS NOT NULL AND cep.client_id = $1::uuid
+        ON cep.exam_id = e.id AND $1::text IS NOT NULL AND cep.client_id = $1::text
 ),
 filtered AS (
     SELECT *
@@ -94,7 +94,7 @@ fn build_ilike_pattern(raw: &str) -> String {
 /// Fetches a paginated, searchable, status-filtered list of exams for the given client.
 pub async fn list_exams(
     pool: &PgPool,
-    client_id: Option<Uuid>,
+    client_id: Option<&str>,
     params: &NormalizedExamListParams,
 ) -> Result<PaginatedExamsResponse, AppError> {
     let search_pattern = params.search.as_deref().map(build_ilike_pattern);
@@ -143,8 +143,8 @@ SELECT
     (
         SELECT COUNT(*)::bigint
         FROM client_answers ca
-        WHERE $2::uuid IS NOT NULL
-          AND ca.client_id = $2::uuid
+        WHERE $2::text IS NOT NULL
+          AND ca.client_id = $2::text
           AND ca.exam_id = e.id
     ) AS answered_count,
     cep.last_question_index,
@@ -154,8 +154,8 @@ SELECT
 FROM exams e
 LEFT JOIN client_exam_progress cep
     ON cep.exam_id = e.id
-   AND $2::uuid IS NOT NULL
-   AND cep.client_id = $2::uuid
+   AND $2::text IS NOT NULL
+   AND cep.client_id = $2::text
 WHERE e.id = $1
 "#;
 
@@ -179,8 +179,8 @@ LEFT JOIN questions q
    AND q.topic_id = t.id
 LEFT JOIN client_answers ca
     ON ca.question_id = q.id
-   AND $2::uuid IS NOT NULL
-   AND ca.client_id = $2::uuid
+   AND $2::text IS NOT NULL
+   AND ca.client_id = $2::text
 WHERE t.exam_id = $1
 GROUP BY t.exam_id, t.id, t.name, t.name_vi, t.sort_order
 ORDER BY t.sort_order ASC, t.id ASC
@@ -204,7 +204,7 @@ struct ExamHeaderRow {
 pub async fn get_exam_overview(
     pool: &PgPool,
     exam_id: &str,
-    client_id: Option<Uuid>,
+    client_id: Option<&str>,
 ) -> Result<ExamDetail, AppError> {
     let header: ExamHeaderRow = sqlx::query_as(GET_EXAM_HEADER_SQL)
         .bind(exam_id)
@@ -247,8 +247,8 @@ SELECT
 FROM questions q
 LEFT JOIN client_answers ca
     ON ca.question_id = q.id
-   AND $2::uuid IS NOT NULL
-   AND ca.client_id = $2::uuid
+   AND $2::text IS NOT NULL
+   AND ca.client_id = $2::text
 WHERE q.exam_id = $1
   AND ($3::text IS NULL OR q.topic_id = $3::text)
 ORDER BY q.question_index ASC
@@ -313,7 +313,7 @@ struct QuestionDetailRow {
 pub async fn get_exam_question(
     pool: &PgPool,
     exam_id: &str,
-    client_id: Option<Uuid>,
+    client_id: Option<&str>,
     topic_id: Option<&str>,
     requested_q: Option<i32>,
 ) -> Result<ExamQuestionPayload, AppError> {
@@ -351,6 +351,8 @@ pub async fn get_exam_question(
     let current_index = selected.question_index;
 
     if let Some(cid) = client_id {
+        ensure_client_id(pool, cid).await?;
+
         sqlx::query(UPSERT_LAST_QUESTION_SQL)
             .bind(cid)
             .bind(exam_id)
@@ -472,7 +474,7 @@ struct QuestionForGradingRow {
 pub async fn submit_exam_answer(
     pool: &PgPool,
     exam_id: &str,
-    client_id: Option<Uuid>,
+    client_id: Option<&str>,
     req: &SubmitAnswerRequest,
 ) -> Result<ExamAnswerRecord, AppError> {
     let question_id = req.question_id.trim();
@@ -535,6 +537,11 @@ pub async fn submit_exam_answer(
     if let Some(cid) = client_id {
         let mut tx = pool.begin().await?;
 
+        sqlx::query("INSERT INTO clients (id) VALUES ($1) ON CONFLICT (id) DO NOTHING")
+            .bind(cid)
+            .execute(&mut *tx)
+            .await?;
+
         sqlx::query(UPSERT_CLIENT_ANSWER_SQL)
             .bind(cid)
             .bind(question_id)
@@ -559,5 +566,170 @@ pub async fn submit_exam_answer(
         question_id: question_id.to_string(),
         selected_option_ids: normalized_selected,
         is_correct,
+    })
+}
+
+const ENSURE_CLIENT_SQL: &str = r#"
+INSERT INTO clients (id)
+VALUES ($1)
+ON CONFLICT (id) DO NOTHING
+"#;
+
+const REGISTER_CLIENT_IF_NEW_SQL: &str = r#"
+INSERT INTO clients (id)
+VALUES ($1)
+ON CONFLICT (id) DO NOTHING
+RETURNING id
+"#;
+
+const REGISTER_GENERATED_CLIENT_SQL: &str = r#"
+INSERT INTO clients (id)
+VALUES (gen_random_uuid()::text)
+ON CONFLICT (id) DO NOTHING
+RETURNING id
+"#;
+
+/// Ensures an existing client ID is registered in `clients` without overwriting it.
+pub async fn ensure_client_id(pool: &PgPool, client_id: &str) -> Result<ClientInfoResponse, AppError> {
+    sqlx::query(ENSURE_CLIENT_SQL)
+        .bind(client_id)
+        .execute(pool)
+        .await?;
+
+    Ok(ClientInfoResponse {
+        client_id: client_id.to_string(),
+    })
+}
+
+/// Registers a brand-new unique client ID, generating a fresh UUID v4 in Postgres if `candidate` exists.
+pub async fn register_unique_client(
+    pool: &PgPool,
+    candidate: Option<&str>,
+) -> Result<ClientInfoResponse, AppError> {
+    if let Some(id) = candidate
+        && let Some(inserted) = sqlx::query_scalar::<_, String>(REGISTER_CLIENT_IF_NEW_SQL)
+            .bind(id)
+            .fetch_optional(pool)
+            .await?
+    {
+        return Ok(ClientInfoResponse {
+            client_id: inserted,
+        });
+    }
+
+    for _ in 0..8 {
+        if let Some(inserted) = sqlx::query_scalar::<_, String>(REGISTER_GENERATED_CLIENT_SQL)
+            .fetch_optional(pool)
+            .await?
+        {
+            return Ok(ClientInfoResponse {
+                client_id: inserted,
+            });
+        }
+    }
+
+    Err(AppError::Config(
+        "failed to allocate a unique client ID".to_string(),
+    ))
+}
+
+/// Renames a client ID to `new_client_id` only if `new_client_id` does not already exist.
+pub async fn rename_client_id(
+    pool: &PgPool,
+    old_client_id: Option<&str>,
+    new_client_id: &str,
+) -> Result<ClientInfoResponse, AppError> {
+    let mut tx = pool.begin().await?;
+
+    if old_client_id == Some(new_client_id) {
+        sqlx::query(ENSURE_CLIENT_SQL)
+            .bind(new_client_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        return Ok(ClientInfoResponse {
+            client_id: new_client_id.to_string(),
+        });
+    }
+
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM clients WHERE id = $1)")
+        .bind(new_client_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+    if exists {
+        return Err(AppError::Conflict(
+            "client ID already exists".to_string(),
+        ));
+    }
+
+    let updated = if let Some(old_id) = old_client_id {
+        let result = sqlx::query("UPDATE clients SET id = $1, updated_at = NOW() WHERE id = $2")
+            .bind(new_client_id)
+            .bind(old_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_unique_conflict)?;
+        result.rows_affected() > 0
+    } else {
+        false
+    };
+
+    if !updated {
+        sqlx::query("INSERT INTO clients (id) VALUES ($1)")
+            .bind(new_client_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_unique_conflict)?;
+    }
+
+    tx.commit().await?;
+
+    Ok(ClientInfoResponse {
+        client_id: new_client_id.to_string(),
+    })
+}
+
+fn map_unique_conflict(err: sqlx::Error) -> AppError {
+    if let sqlx::Error::Database(db_err) = &err
+        && db_err.code().as_deref() == Some("23505")
+    {
+        return AppError::Conflict("client ID already exists".to_string());
+    }
+    AppError::Database(err)
+}
+
+/// Switches to an existing `target_client_id` and deletes the current client's data via cascade.
+pub async fn sync_client_id(
+    pool: &PgPool,
+    current_client_id: Option<&str>,
+    target_client_id: &str,
+) -> Result<ClientInfoResponse, AppError> {
+    let mut tx = pool.begin().await?;
+
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM clients WHERE id = $1)")
+        .bind(target_client_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+    if !exists {
+        return Err(AppError::NotFound(
+            "target client ID not found".to_string(),
+        ));
+    }
+
+    if let Some(current_id) = current_client_id
+        && current_id != target_client_id
+    {
+        sqlx::query("DELETE FROM clients WHERE id = $1")
+            .bind(current_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+
+    Ok(ClientInfoResponse {
+        client_id: target_client_id.to_string(),
     })
 }

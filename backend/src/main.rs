@@ -43,7 +43,7 @@ async fn main() -> Result<(), AppError> {
 
     let cors = CorsLayer::new()
         .allow_origin(origins)
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, HeaderName::from_static("x-client-id")]);
 
     let app = routes::create_router(AppState::new(pool))

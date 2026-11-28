@@ -83,7 +83,7 @@ flowchart LR
 - **Component & Cross-Route State:** Uses Svelte 5 runes (`$state`, `$derived`, `$effect`). Shared header state (`examCode`, `showVi`) lives in `src/lib/state/header.svelte.ts`.
 - **Zero Data Caching:** When `PUBLIC_TEST_FLAG=N`, no exam lists, questions, or answers are cached in the browser.
 - **`localStorage` Keys:**
-  - `dump_client_id`: Auto-generated UUID (`crypto.randomUUID()`) sent on every real API request via the `X-Client-Id` header.
+  - `dump_client_id`: Auto-generated UUID v4 text (or user-customized ID) saved in `localStorage`, registered/updated via `/api/clients/*` and sent on every API request via `X-Client-Id`.
   - `dump_show_vi`: Persists whether the **`VN`** bilingual translation toggle is active.
   - `dump_mock_progress_v1`: Used **only** by `src/lib/mocks/exams.ts` when `PUBLIC_TEST_FLAG=Y`.
 

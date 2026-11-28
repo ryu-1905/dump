@@ -19,13 +19,16 @@ This document describes the technology stack, folder structure, request flow, an
 
 ## 2. Directory Structure
 
+- **CORS:** Configured via `CORS_ORIGIN`, allowing `GET, POST, PUT, OPTIONS` and `Content-Type, X-Client-Id`.
+- **Migrations:**
 ```text
 backend/
 ├── Cargo.toml
 ├── migrations/                                     # Ordered SQLx PostgreSQL migrations
 │   ├── 20261127144440_init.sql
 │   ├── 20261127151306_add_show_answer_by_default.sql
-│   └── 20261127163324_drop_best_score_percent.sql
+│   ├── 20261127163324_drop_best_score_percent.sql
+│   └── 20261128043957_add_clients_table.sql
 ├── seeds/                                          # Idempotent seed SQL scripts
 │   └── 001_mb330_20q.sql
 └── src/
@@ -57,7 +60,7 @@ flowchart LR
     Routes -->|Err(AppError)| Error["error.rs (400 / 404 / 500 JSON)"]
 ```
 
-- **Thin Routes (`routes/exams.rs`):** Parse `X-Client-Id` (optional UUID; malformed values return `400 Bad Request`), validate query/body bounds, and delegate to `exam_repo`.
+- **Thin Routes (`routes/exams.rs`):** Parse `X-Client-Id` (`3–64` chars `[a-zA-Z0-9_-]`; malformed values return `400 Bad Request`), validate query/body bounds, and delegate to `exam_repo`. Includes client ID lifecycle endpoints (`/clients/register`, `/clients/ensure`, `/clients/id`, `/clients/sync`).
 - **Static SQL (`repositories/exam_repo.rs`):** All SQL statements are `&'static str` constants (or `concat!`-built `&'static str`) to satisfy `sqlx 0.9` `SqlSafeStr` checks without dynamic string interpolation.
 - **Transactional Answer Grading (`submit_exam_answer`):**
   - Validates `questionIndex`, option IDs, single-choice vs. multiple-choice rules, and blocks submissions on `SIMULATION` questions (`show_answer_by_default = true` with empty `options`).

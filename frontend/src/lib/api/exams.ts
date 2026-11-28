@@ -77,3 +77,48 @@ export async function submitExamAnswer(
 		body: JSON.stringify(payload)
 	});
 }
+
+export interface ClientInfoResponse {
+	clientId: string;
+}
+
+export async function registerClient(candidateId?: string): Promise<ClientInfoResponse> {
+	const id = candidateId ?? getClientId() ?? crypto.randomUUID();
+	if (USE_MOCK_API) {
+		return { clientId: id };
+	}
+	return apiRequest<ClientInfoResponse>('/clients/register', {
+		method: 'POST',
+		headers: { 'X-Client-Id': id }
+	});
+}
+
+export async function ensureClient(clientId: string): Promise<ClientInfoResponse> {
+	if (USE_MOCK_API) {
+		return { clientId };
+	}
+	return apiRequest<ClientInfoResponse>('/clients/ensure', {
+		method: 'POST',
+		headers: { 'X-Client-Id': clientId }
+	});
+}
+
+export async function renameClientId(newClientId: string): Promise<ClientInfoResponse> {
+	if (USE_MOCK_API) {
+		return { clientId: newClientId };
+	}
+	return apiRequest<ClientInfoResponse>('/clients/id', {
+		method: 'PUT',
+		body: JSON.stringify({ newClientId })
+	});
+}
+
+export async function syncClientId(targetClientId: string): Promise<ClientInfoResponse> {
+	if (USE_MOCK_API) {
+		return { clientId: targetClientId };
+	}
+	return apiRequest<ClientInfoResponse>('/clients/sync', {
+		method: 'POST',
+		body: JSON.stringify({ targetClientId })
+	});
+}
